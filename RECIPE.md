@@ -10,7 +10,7 @@ A dark terminal layout dressed as a Foundation containment console. A paper-colo
 - **Sidebar (290px):** Spaces list (square corners), a Machines panel (`THIS COMPUTER` plus each remote machine from `hc machine ls`, with state, space and agent counts, a `+` for a new space there and `+ ADD MACHINE`, which opens Settings > Machines), a Site Map (one `S-nn` cell per space, coloured by class), and Personnel Files (one file per agent: photo box, `ID`, `MTF` unit, status stamp, redacted site, `FILE` button).
 - **Tabs (30px):** each tab is a unit, `E-11 NINE-TAILED FOX`, `NU-7`, `A-1`, ... A tab you named shows `<code> <name>`.
 - **Panes:** square frames, red focus border, a document header per pane (`DOC-nnn`, `SUBJECT:`, `MTF` chip, redacted path, status stamp). Idle unfocused panes get a floating `[DATA EXPUNGED]` stamp.
-- **Footer (26px):** clearance text, object-class chip, then the latest incident or a rotating notice, an INCIDENT ARCHIVE button and subject counts.
+- **Footer (26px):** clearance text, object-class chip, a branch chip (the shown space's git branch, hidden outside a repo), then the latest incident or a rotating notice, an INCIDENT ARCHIVE button and subject counts.
 
 ## How it behaves
 
