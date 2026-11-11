@@ -6,7 +6,7 @@ A dark terminal layout dressed as a Foundation containment console. A paper-colo
 
 ## What you see
 
-- **Header (62px, paper `#d6d6cf`, red edge `#c8102e`):** emblem, `SCP FOUNDATION`, ITEM # (`SCP-nnn` from the space's index), OBJECT CLASS of the shown site, two redacted fields, a DEPT chip, a CLEARANCE chip, the time with `SITE-19 · DAY nnn`, and window buttons.
+- **Header (62px, paper `#d6d6cf`, red edge `#c8102e`):** emblem, `SCP FOUNDATION`, ITEM # (`SCP-nnn` from the space's index), OBJECT CLASS of the shown site, two redacted fields, a DEPT chip, a CLEARANCE chip, the time with `SITE-19 · DAY nnn`, a settings gear (opens `app.settings`), and window buttons.
 - **Sidebar (290px):** Spaces list (square corners), a Site Map (one `S-nn` cell per space, coloured by class), and Personnel Files (one file per agent: photo box, `ID`, `MTF` unit, status stamp, redacted site, `FILE` button).
 - **Tabs (30px):** each tab is a unit, `E-11 NINE-TAILED FOX`, `NU-7`, `A-1`, ... A tab you named shows `<code> <name>`.
 - **Panes:** square frames, red focus border, a document header per pane (`DOC-nnn`, `SUBJECT:`, `MTF` chip, redacted path, status stamp). Idle unfocused panes get a floating `[DATA EXPUNGED]` stamp.

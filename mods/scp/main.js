@@ -216,6 +216,7 @@ class Header {
       .hover((s) => s.bg(danger ? P.red : P.paper2))
       .on_mouse_down("left", stop).on_click(() => run(cmd))
       .child(svg(`mods/scp/icons/${name}.svg`).size(14).flex_none().text_color(P.ink));
+    const settingsBtn = btn("w-set", "settings", "app.settings", false).tooltip("Settings: theme, fonts, sounds, machines");
     const buttons = w?.buttons
       ? h_flex().h_full().flex_none()
         .child(btn("w-min", "win-min", "window.minimize"))
@@ -238,6 +239,7 @@ class Header {
         .child(v_flex().flex_none().items_end()
           .child(div().font_family(MONO).font_weight(800).text_size(18).text_color(P.ink).child(clock))
           .child(div().font_family(MONO).text_size(9).text_color(P.ink2).child(stardate))))
+      .child(settingsBtn)
       .when(Boolean(buttons), (el) => el.child(buttons));
   }
 }
