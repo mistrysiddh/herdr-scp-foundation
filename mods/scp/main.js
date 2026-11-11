@@ -230,7 +230,7 @@ class Header {
       .on_mouse_down("left", stop).on_click(() => { sfx("tick"); cycleDept(); })
       .child(`DEPT: ${DEPTS[deptIdx()].label}`);
 
-    const btn = (id, name, cmd, danger) => div().id(id).w(42).h_full().flex().items_center().justify_center()
+    const btn = (id, name, cmd, danger) => div().id(id).w(42).h_full().flex_none().flex().items_center().justify_center()
       .hover((s) => s.bg(danger ? P.red : P.paper2))
       .on_mouse_down("left", stop).on_click(() => run(cmd))
       .child(svg(`mods/scp/icons/${name}.svg`).size(14).flex_none().text_color(P.ink));
