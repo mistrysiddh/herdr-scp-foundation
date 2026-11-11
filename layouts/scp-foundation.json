@@ -57,6 +57,19 @@
               }
             },
             {
+              "id": "machines",
+              "type": "block",
+              "size": {
+                "px": 120
+              },
+              "content": {
+                "mod": "scp",
+                "props": {
+                  "role": "machines"
+                }
+              }
+            },
+            {
               "id": "sitemap",
               "type": "block",
               "size": {

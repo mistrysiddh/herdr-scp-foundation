@@ -7,7 +7,7 @@ A dark terminal layout dressed as a Foundation containment console. A paper-colo
 ## What you see
 
 - **Header (62px, paper `#d6d6cf`, red edge `#c8102e`):** emblem, `SCP FOUNDATION`, ITEM # (`SCP-nnn` from the space's index), OBJECT CLASS of the shown site, two redacted fields, a DEPT chip, a CLEARANCE chip, the time with `SITE-19 · DAY nnn`, a settings gear (opens `app.settings`), and window buttons.
-- **Sidebar (290px):** Spaces list (square corners), a Site Map (one `S-nn` cell per space, coloured by class), and Personnel Files (one file per agent: photo box, `ID`, `MTF` unit, status stamp, redacted site, `FILE` button).
+- **Sidebar (290px):** Spaces list (square corners), a Machines panel (`THIS COMPUTER` plus each remote machine from `hc machine ls`, with state, space and agent counts, a `+` for a new space there and `+ ADD MACHINE`, which opens Settings > Machines), a Site Map (one `S-nn` cell per space, coloured by class), and Personnel Files (one file per agent: photo box, `ID`, `MTF` unit, status stamp, redacted site, `FILE` button).
 - **Tabs (30px):** each tab is a unit, `E-11 NINE-TAILED FOX`, `NU-7`, `A-1`, ... A tab you named shows `<code> <name>`.
 - **Panes:** square frames, red focus border, a document header per pane (`DOC-nnn`, `SUBJECT:`, `MTF` chip, redacted path, status stamp). Idle unfocused panes get a floating `[DATA EXPUNGED]` stamp.
 - **Footer (26px):** clearance text, object-class chip, then the latest incident or a rotating notice, an INCIDENT ARCHIVE button and subject counts.
@@ -26,7 +26,7 @@ A dark terminal layout dressed as a Foundation containment console. A paper-colo
 
 ## Built from
 
-- `layouts/scp-foundation.json`: root column (`titlebar: none`, theme `scp-foundation`, JetBrains Mono / Geist, `toast: scp-toast`, `preview`), `header` (62px, `window_drag`), `body` row: `sidebar` column (`spaces` = `scp-spaces`, `sitemap`, `agents` = scp role `personnel`) and `work` column (`tabs` = `scp-tabs`, `work-body` row of `main` and a hidden `panel` stack with Herdr's `files` and `changes`), `footer` 26px. Pane frames: `lone`, radius 0, header `{mod: scp, role: pane}`, floating `stamps` block.
+- `layouts/scp-foundation.json`: root column (`titlebar: none`, theme `scp-foundation`, JetBrains Mono / Geist, `toast: scp-toast`, `preview`), `header` (62px, `window_drag`), `body` row: `sidebar` column (`spaces` = `scp-spaces`, `machines` = scp role `machines` at 120px, `sitemap`, `agents` = scp role `personnel`) and `work` column (`tabs` = `scp-tabs`, `work-body` row of `main` and a hidden `panel` stack with Herdr's `files` and `changes`), `footer` 26px. Pane frames: `lone`, radius 0, header `{mod: scp, role: pane}`, floating `stamps` block.
 - `mods/scp`: one `View` with roles header, footer, pane, personnel, sitemap, stamp, terminate, archive, article, dossier, login (`props.role`). `mtf.js` maps an agent address to a unit. Shared state: `scp.clearance`, `scp.log`, `scp.loginAt`, `scp.drill`, `scp.seen`, `scp.dept`. Uses `agents()`, `spaces()`, `panes()`, `run`, `openOverlay`, `nextCommand`, `playSound`, `exec` (only `mkdir -p` for the reports folder), `writeTextFile`, `notify`.
 - `mods/scp-tabs`: Herdr's `tabs` mod cloned; labels, square chips, clearance redaction.
 - `mods/scp-toast`: Herdr's `toast` mod cloned; notifications as memos.

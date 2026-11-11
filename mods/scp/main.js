@@ -18,7 +18,7 @@ import { h_flex, v_flex } from "gpui-base";
 import {
   props, spaces, agents, panes, run, home, shared, setShared, settings, playSound,
   setAgentOrder, openOverlay, closeOverlay, nextCommand, window as appWindow,
-  exec, appHome, writeTextFile, notify,
+  exec, appHome, writeTextFile, notify, hc,
 } from "herdr";
 import { unitOf } from "./mtf.js";
 
@@ -232,7 +232,7 @@ class Header {
       .child(h_flex().flex_1().min_w(0).h_full().items_center().gap(20)
         .pl(w?.platform === "macos" ? 86 : 14).pr(16)
         .child(brand).child(sep())
-        .child(div().flex_1().min_w(0).child(fields))
+        .child(div().flex_1().min_w(0).overflow_hidden().child(fields))
         .when(Boolean(alarm), (el) => el.child(alarm))
         .child(dept)
         .child(badge)
@@ -763,6 +763,82 @@ class Dossier {
   }
 }
 
+// ---- machines (this computer and remote sites) -------------------------------
+
+// state -> [label, colour]
+const MACHINE_STATE = {
+  connected: ["ONLINE", P.green], asleep: ["ASLEEP", P.dim], needs_login: ["LOGIN REQUIRED", P.amber],
+  unreachable: ["UNREACHABLE", P.red],
+};
+
+class Machines {
+  init(_p, cx) {
+    this.list = []; // remote machines from `hc machine ls`
+    const refresh = (cx) => cx.spawn(async (cx) => {
+      try {
+        const r = await hc(["machine", "ls", "--json"]);
+        if (r.code === 0) this.list = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary);
+      } catch (e) { console.log(`scp: machine ls failed: ${e}`); }
+      cx.notify();
+    });
+    refresh(cx);
+    cx.timer.every(15000, refresh);
+  }
+
+  render() {
+    const sp = spaces();
+    const all = agents();
+    const names = [...new Set([...this.list.map((m) => m.name), ...sp.map((s) => s.machine).filter(Boolean)])].sort();
+    const rows = [null, ...names];
+
+    const row = (m) => {
+      const info = this.list.find((k) => k.name === m);
+      const mine = sp.filter((s) => (s.machine ?? null) === m);
+      const ids = new Set(mine.map((s) => s.id));
+      const nAgents = all.filter((a) => ids.has(a.space)).length;
+      const state = m ? (info?.state ?? "asleep") : "connected";
+      const [label, color] = MACHINE_STATE[state] ?? [String(state).replace(/_/g, " ").toUpperCase(), P.dim];
+      const here = mine.some((s) => s.active);
+      const login = state === "needs_login" ? `hc machine login ${m}` : null;
+      const go = () => {
+        sfx("tick");
+        const target = mine.find((s) => s.active) ?? mine[0];
+        if (target) run("space.select", { id: target.id });
+        else if (state === "connected") run("space.new", { machine: m ?? "" });
+        else run("app.settings", { section: "machines" });
+      };
+      return h_flex().id(`mach-${m ?? "local"}`).w_full().h(34).flex_none().px(10).gap(8).items_center().cursor_pointer()
+        .bg(here ? P.dark2 : P.dark).border_b(1).border_color(P.edge).hover((s) => s.bg(P.dark2))
+        .tooltip(login ? `Needs a login: run ${login} in a terminal` : m ? `${m} · ${label}` : "This computer")
+        .on_click(go)
+        .child(div().w(2).h(18).flex_none().bg(here ? P.red : "#00000000"))
+        .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(14).flex_none().text_color(here ? P.text : P.dim))
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          .child(m
+            ? redact(`mach-n-${m}`, m.toUpperCase(), { bg: P.bar, reveal: P.text, size: 11, need: 2 })
+            : txt("THIS COMPUTER", P.text, 800, 11))
+          .child(txt(`${two(mine.length)} SPACES · ${two(nAgents)} AGENTS`, P.dim, 400, 9)))
+        .child(div().flex_none().px(5).py(1).border(1).border_color(color)
+          .font_family(MONO).font_weight(800).text_size(8.5).text_color(color).child(label))
+        .when(state === "connected", (el) => el.child(div().id(`mach-new-${m ?? "local"}`).flex_none().w(20).h(20).flex().items_center().justify_center()
+          .border(1).border_color(P.edge).font_family(MONO).font_weight(800).text_size(12).text_color(P.dim)
+          .tooltip(`New space on ${m ?? "this computer"}`).hover((s) => s.text_color(P.text).border_color(P.dim))
+          .on_click((_e, cx) => { cx.stop_propagation(); sfx("tick"); run("space.new", { machine: m ?? "" }); })
+          .child("+")));
+    };
+
+    return v_flex().id("machines").size_full().bg(P.dark)
+      .child(h_flex().w_full().h(26).flex_none().px(12).gap(8).items_center().border_b(1).border_color(P.edge)
+        .child(txt("MACHINES", P.text, 700, 10.5))
+        .child(div().flex_1())
+        .child(div().id("mach-add").flex_none().px(6).py(1).border(1).border_color(P.edge).cursor_pointer()
+          .tooltip("Add a remote machine (Settings > Machines)").hover((s) => s.bg(P.dark2))
+          .on_click(() => { sfx("tick"); run("app.settings", { section: "machines" }); })
+          .child(txt("+ ADD MACHINE", P.text, 700, 9))))
+      .child(v_flex().id("mach-list").w_full().flex_1().min_h(0).overflow_y_scrollbar().children(rows.map(row)));
+  }
+}
+
 // ---- site map (one sector per space) -----------------------------------------
 
 const CLASS_COLOR = { APOLLYON: "#ef3b4f", KETER: P.red, EUCLID: P.amber, THAUMIEL: "#8e6bd6", SAFE: P.green };
@@ -863,7 +939,7 @@ class Login {
 
 // ---- roles -------------------------------------------------------------------
 
-const ROLES = { header: Header, footer: Footer, pane: PaneHeader, personnel: Personnel, stamp: Stamps, terminate: Terminate, archive: Archive, article: Article, login: Login, dossier: Dossier, sitemap: SiteMap };
+const ROLES = { header: Header, footer: Footer, pane: PaneHeader, personnel: Personnel, stamp: Stamps, terminate: Terminate, archive: Archive, article: Article, login: Login, dossier: Dossier, sitemap: SiteMap, machines: Machines };
 
 export default class Scp extends View {
   init(p, cx) {
