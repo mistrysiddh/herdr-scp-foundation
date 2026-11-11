@@ -4,6 +4,20 @@ A dark terminal layout dressed as a Foundation containment console: a paper docu
 
 ![SCP Foundation](preview.png)
 
+## Screenshots
+
+Staged with fake agents. The panes show scripted demo text only.
+
+| Foundation | O5 Council |
+|---|---|
+| ![Foundation](screenshots/foundation.png) | ![O5 Council](screenshots/o5-council.png) |
+| **Temporal** | **Disinformation** |
+| ![Temporal](screenshots/temporal.png) | ![Disinformation](screenshots/disinformation.png) |
+
+The sidebar: Containment Sites, Machines, Recent Incidents, Site Map and Personnel Files.
+
+![Sidebar](screenshots/sidebar.png)
+
 See [RECIPE.md](RECIPE.md) for everything it does and how it is built.
 
 ## Install
