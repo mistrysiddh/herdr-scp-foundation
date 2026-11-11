@@ -3,9 +3,9 @@
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
 // switch, right-click for its menu, drag to reorder.
 
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, agents, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, agents, machines, panes, home, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -25,7 +25,7 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }) => (tree ? 28 : 30);
+const rowHeight = ({ tree }) => (tree ? 28 : 46);
 const RAIL_CELL = 32;
 const railCell = (el) => h_flex().flex_none().justify_center().child(el);
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
@@ -37,6 +37,20 @@ const FALLBACK = 60000;
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+
+// Foundation vocabulary: object class from the agents in a space (same rule as the scp mod), and its colour.
+const MONO = "JetBrains Mono";
+const CLASS_COLOR = { SAFE: "#6f9a52", EUCLID: "#d9a21b", THAUMIEL: "#9d86e0", KETER: "#e8553f", APOLLYON: "#ef3b4f" };
+function classOf(list) {
+  const n = (st) => list.filter((a) => a.status === st).length;
+  if (n("blocked") >= 3) return "APOLLYON";
+  if (n("blocked")) return "KETER";
+  if (n("working")) return "EUCLID";
+  if (n("done")) return "THAUMIEL";
+  return "SAFE";
+}
+const STAMP = { blocked: ["BREACH", "#ef3b4f"], working: ["UNDER OBSERVATION", "#d9a21b"], done: ["RECONTAINED", "#6f9a52"] };
+const clearance = () => Math.min(5, Math.max(1, Math.round(Number(shared("scp.clearance")) || 4)));
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -386,7 +400,7 @@ export default class Spaces extends View {
 
   // Subject count and containment state of a space: OBS (working), BREACH (blocked), RECON (done), SAFE.
   stateChip(w, t) {
-    const n = agents().filter((a) => a.space === w.id).length;
+    const n = 0;
     const [label, color] = w.status === "blocked" ? ["BREACH", t.blocked ?? t.ansi1]
       : w.status === "working" ? ["OBS", t.ansi3]
       : w.status === "done" ? ["RECON", t.ansi2]
@@ -410,7 +424,8 @@ export default class Spaces extends View {
       .flex_none()
       .justify_center()
       .rounded(0)
-      .when(on, (el) => el.bg(t.selected))
+      .when(on, (el) => el.bg(t.raised ?? t.selected))
+      .when(on && !tree, (el) => el.child(div().absolute().left(0).top(0).bottom(0).w(3).bg(shared("scp.accent") || "#c8102e")))
       .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
       .when(this.pressed === w.id && this.over !== w.id, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === w.id && this.pressed !== w.id, (el) => el.child(
@@ -442,16 +457,60 @@ export default class Spaces extends View {
         cx.notify();
       })
       .on_mouse_down("right", () => this.menu(w))
-      .child(
-        h_flex()
-          .gap(9)
-          .items_center()
-          .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
-          .child(div().flex_shrink(0).max_w(110).truncate().text_color(t.foreground).child(w.name))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(!tree, el => el.child(this.stateChip(w, t))),
-      );
+      .child(tree ? this.treeLine(w, g, t) : this.spaceLine(w, g, fill, t));
+  }
+
+  // a worktree under its repo: one quiet line
+  treeLine(w, g, t) {
+    return h_flex().gap(9).items_center()
+      .child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim).ml(22))
+      .child(div().flex_shrink(0).max_w(110).truncate().text_color(t.foreground).child(w.name))
+      .child(g ? this.gitTail(g, true, w.name, t) : div().flex_1());
+  }
+
+  // A containment-site file: emblem in its object-class colour, SCP number and (cleared) name,
+  // then its state and subject count; object-class chip and the subjects' icons on the right.
+  spaceLine(w, g, fill, t) {
+    const mine = agents().filter((a) => a.space === w.id);
+    const cls = classOf(mine);
+    const color = CLASS_COLOR[cls];
+    const breach = mine.some((a) => a.status === "blocked");
+    const worst = breach ? "blocked" : mine.some((a) => a.status === "working") ? "working" : mine.some((a) => a.status === "done") ? "done" : null;
+    const [stamp, stampColor] = STAMP[worst] ?? ["CONTAINED", t.dim];
+    const n = mine.length;
+    const num = `SCP-${String(w.index).padStart(3, "0")}`;
+    const cleared = clearance() >= 3;
+    const name = cleared ? w.name : "\u2588".repeat(Math.max(3, Math.min(9, [...w.name].length + 2)));
+    const icon = (a) => {
+      const pr = a.program ?? {};
+      const bad = a.status === "blocked";
+      const glyph = !pr.icon ? div().size(10).flex_none().rounded(5).bg(t.dim)
+        : pr.tint ? svg(pr.icon).size(12).flex_none().text_color(bad ? "#ef3b4f" : (pr.color ?? t.muted))
+        : image(pr.icon).w(12).h(12).flex_none();
+      return div().size(16).flex_none().flex().items_center().justify_center()
+        .when(bad, (el) => el.border_1().border_color("#ef3b4f"))
+        .tooltip(`${pr.name ?? a.app ?? "subject"} \u00b7 ${a.status ?? "idle"}`).child(glyph);
+    };
+    const h = home();
+    const cwd = place(w, panes()) ?? "";
+    const folder = !cwd ? "no terminal" : cwd === h ? "~" : cwd.startsWith(`${h}/`) ? `~${cwd.slice(h.length)}` : cwd;
+    const branch = g?.branch && g.branch !== "(detached)" ? ` \u00b7 ${g.branch}` : "";
+    return h_flex().gap(9).items_center()
+      .tooltip(`${num} \u00b7 ${w.name} \u00b7 ${folder}${branch} \u00b7 OBJECT CLASS ${cls}`)
+      .child(svg("mods/scp/emblem.svg").size(22).flex_none().text_color(color)
+        .when(breach, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 700 })))
+      .child(v_flex().flex_1().min_w(0).gap(2)
+        .child(h_flex().gap(6).items_center().min_w(0)
+          .child(div().flex_none().font_family(MONO).text_size(10).font_bold().text_color(color).child(num))
+          .child(div().flex_1().min_w(0).truncate().font_family(MONO).text_size(11).text_color(cleared ? t.foreground : t.dim).child(name)))
+        .child(div().min_w(0).truncate().font_family(MONO).text_size(9).font_bold().text_color(stampColor)
+          .child(`${stamp} \u00b7 ${String(n).padStart(2, "0")} SUBJECT${n === 1 ? "" : "S"}`)))
+      .child(v_flex().flex_none().items_end().gap(3)
+        .child(div().flex_none().px(5).py(1).border_1().border_color(color).font_family(MONO).text_size(8.5).font_bold().text_color(color)
+          .when(breach, (el) => el.loop("opacity", { from: 0.4, to: 1, period: 700 })).child(cls))
+        .child(h_flex().gap(2).items_center().h(16)
+          .children(mine.slice(0, 4).map(icon))
+          .when(mine.length > 4, (el) => el.child(div().text_size(9.5).text_color(t.dim).child(`+${mine.length - 4}`)))));
   }
 
   compact({ w, i }, t) {
@@ -479,7 +538,7 @@ export default class Spaces extends View {
     const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
     let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
     for (const p of sp) {
-      if (kept[p.id] || p.name === "~") continue;
+      if (kept[p.id]) continue;
       const uses = c => Object.values(kept).filter(v => v === c).length;
       kept[p.id] = palette.reduce((best, c) => uses(c) < uses(best) ? c : best);
       changed = true;
@@ -488,9 +547,11 @@ export default class Spaces extends View {
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(collapsed, el => el.pl(0).pr(0).justify_center())
-        .when(!collapsed, el => el.child("Spaces"))
+        .when(!collapsed, el => el.child(h_flex().gap(8).items_center()
+          .child(div().font_family(MONO).font_bold().text_size(10.5).text_color(t.foreground).child("CONTAINMENT SITES"))
+          .child(div().px(5).bg(t.foreground).text_color(t.chrome).font_family(MONO).font_bold().text_size(10).child(String(sp.length).padStart(2, "0")))))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(0).hover(s => s.bg(t.hover).text_color(t.foreground))
-          .on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
+          .tooltip("Open a new containment site").on_click(() => run("space.new")).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.grouped(t, collapsed)));

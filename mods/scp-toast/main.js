@@ -12,6 +12,16 @@ const DEPT = [
   { accent: "#5f8f3f", paper: "#cfd6c6", ink: "#0b0e0a", ink2: "#354031", strip: "#0b0e0a", stripText: "#cfd6c6", warn: "#8a5d00", ok: "#3f6b27" },
   { accent: "#4f7f9c", paper: "#ccd3d9", ink: "#0c0e10", ink2: "#36404a", strip: "#0c0e10", stripText: "#ccd3d9", warn: "#8a5d00", ok: "#3f6b27" },
   { accent: "#d9a21b", paper: "#14120a", ink: "#e8d9a0", ink2: "#a89a62", strip: "#d9a21b", stripText: "#120f05", warn: "#d9a21b", ok: "#8fbf6e" },
+  { accent: "#6d7f92", paper: "#cfd1cd", ink: "#0f1011", ink2: "#44484c", strip: "#0f1011", stripText: "#cfd1cd", warn: "#8a5d00", ok: "#3f6b27" },
+  { accent: "#7d3c98", paper: "#d1c9ce", ink: "#100c11", ink2: "#473a4d", strip: "#100c11", stripText: "#d1c9ce", warn: "#8a5d00", ok: "#3f6b27" },
+  { accent: "#d2691e", paper: "#dbcebf", ink: "#140f0b", ink2: "#584334", strip: "#140f0b", stripText: "#dbcebf", warn: "#8a5d00", ok: "#3f6b27" },
+  { accent: "#17847f", paper: "#c4d1cb", ink: "#0b1010", ink2: "#334948", strip: "#0b1010", stripText: "#c4d1cb", warn: "#8a5d00", ok: "#3f6b27" },
+  { accent: "#2b4a8b", paper: "#c7cacc", ink: "#0c0d10", ink2: "#373d4a", strip: "#0c0d10", stripText: "#c7cacc", warn: "#8a5d00", ok: "#3f6b27" },
+  { accent: "#20b2d6", paper: "#0b1416", ink: "#bfe4ec", ink2: "#69a4b2", strip: "#20b2d6", stripText: "#0c0c0c", warn: "#20b2d6", ok: "#8fbf6e" },
+  { accent: "#8b6cf0", paper: "#121018", ink: "#dad2f3", ink2: "#9488bc", strip: "#8b6cf0", stripText: "#0c0c0c", warn: "#8b6cf0", ok: "#8fbf6e" },
+  { accent: "#c2185b", paper: "#d9c4c6", ink: "#130b0e", ink2: "#553341", strip: "#130b0e", stripText: "#d9c4c6", warn: "#8a5d00", ok: "#3f6b27" },
+  { accent: "#8b5a2b", paper: "#d2ccc1", ink: "#100e0c", ink2: "#4a4037", strip: "#100e0c", stripText: "#d2ccc1", warn: "#8a5d00", ok: "#3f6b27" },
+  { accent: "#a08a2a", paper: "#d5d2c0", ink: "#12100c", ink2: "#4e4a37", strip: "#12100c", stripText: "#d5d2c0", warn: "#8a5d00", ok: "#3f6b27" },
 ];
 const dept = () => DEPT[Math.min(DEPT.length - 1, Math.max(0, Math.round(Number(shared("scp.dept")) || 0)))];
 const levelOf = (D, level) => ({

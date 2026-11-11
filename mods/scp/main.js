@@ -60,7 +60,17 @@ const DEPTS = [
   { label: "FOUNDATION", theme: "scp-foundation", pal: { red: "#c8102e", onRed: "#ffffff", paper: "#d6d6cf", paper2: "#c4c4bc", ink: "#0c0d0d", ink2: "#3a3d3c", rule: "#9a9d96", black: "#050606", darkPaper: false } },
   { label: "MTF TACTICAL", theme: "scp-mtf", pal: { red: "#5f8f3f", onRed: "#ffffff", paper: "#cfd6c6", paper2: "#bcc5b0", ink: "#0b0e0a", ink2: "#354031", rule: "#94a089", black: "#050605", darkPaper: false } },
   { label: "ETHICS COMMITTEE", theme: "scp-ethics", pal: { red: "#4f7f9c", onRed: "#ffffff", paper: "#ccd3d9", paper2: "#b9c2ca", ink: "#0c0e10", ink2: "#36404a", rule: "#8f9aa4", black: "#050607", darkPaper: false } },
-  { label: "O5 COUNCIL", theme: "scp-o5", pal: { red: "#d9a21b", onRed: "#120f05", paper: "#14120a", paper2: "#1f1c10", ink: "#e8d9a0", ink2: "#a89a62", rule: "#4a4122", black: "#2e2814", darkPaper: true } },
+  { label: "O5 COUNCIL", theme: "scp-o5", pal: { red: "#d9a21b", onRed: "#120f05", paper: "#14120a", paper2: "#1f1c10", ink: "#e8d9a0", ink2: "#a89a62", rule: "#4a4122", black: "#a89a62", darkPaper: true } },
+  { label: "OVERWATCH", theme: "scp-overwatch", pal: { red: "#6d7f92", onRed: "#ffffff", paper: "#cfd1cd", paper2: "#bbbdba", ink: "#0f1011", ink2: "#44484c", rule: "#939694", black: "#090a0b", darkPaper: false } },
+  { label: "INTERNAL SECURITY", theme: "scp-internal", pal: { red: "#7d3c98", onRed: "#ffffff", paper: "#d1c9ce", paper2: "#bdb5ba", ink: "#100c11", ink2: "#473a4d", rule: "#968c95", black: "#0a070b", darkPaper: false } },
+  { label: "TACTICAL RESPONSE", theme: "scp-tactical", pal: { red: "#d2691e", onRed: "#ffffff", paper: "#dbcebf", paper2: "#c7bbac", ink: "#140f0b", ink2: "#584334", rule: "#a29382", black: "#0d0906", darkPaper: false } },
+  { label: "RECOVERY", theme: "scp-recovery", pal: { red: "#17847f", onRed: "#ffffff", paper: "#c4d1cb", paper2: "#b1beb7", ink: "#0b1010", ink2: "#334948", rule: "#869791", black: "#060a0a", darkPaper: false } },
+  { label: "SECURITY", theme: "scp-security", pal: { red: "#2b4a8b", onRed: "#ffffff", paper: "#c7cacc", paper2: "#b3b7b9", ink: "#0c0d10", ink2: "#373d4a", rule: "#898e93", black: "#07080a", darkPaper: false } },
+  { label: "ABNORMAL TECH", theme: "scp-tech", pal: { red: "#20b2d6", onRed: "#0c0c0c", paper: "#0b1416", paper2: "#0c1b1e", ink: "#bfe4ec", ink2: "#69a4b2", rule: "#10343d", black: "#69a4b2", darkPaper: true } },
+  { label: "TEMPORAL", theme: "scp-temporal", pal: { red: "#8b6cf0", onRed: "#0c0c0c", paper: "#121018", paper2: "#171421", ink: "#dad2f3", ink2: "#9488bc", rule: "#2a2244", black: "#9488bc", darkPaper: true } },
+  { label: "DISINFORMATION", theme: "scp-disinfo", pal: { red: "#c2185b", onRed: "#ffffff", paper: "#d9c4c6", paper2: "#c6b1b3", ink: "#130b0e", ink2: "#553341", rule: "#a0868b", black: "#0d0608", darkPaper: false } },
+  { label: "MEDICAL", theme: "scp-medical", pal: { red: "#8b5a2b", onRed: "#ffffff", paper: "#d2ccc1", paper2: "#bfb9ad", ink: "#100e0c", ink2: "#4a4037", rule: "#989084", black: "#0a0807", darkPaper: false } },
+  { label: "RESEARCH", theme: "scp-research", pal: { red: "#a08a2a", onRed: "#ffffff", paper: "#d5d2c0", paper2: "#c1bfad", ink: "#12100c", ink2: "#4e4a37", rule: "#9b9884", black: "#0b0a06", darkPaper: false } },
 ];
 // Called at the start of every render and init so each role paints with the current department.
 function applyDept() {
@@ -76,6 +86,7 @@ const deptIdx = () => Math.min(DEPTS.length - 1, Math.max(0, Math.round(Number(s
 const cycleDept = () => {
   const n = (deptIdx() + 1) % DEPTS.length;
   setShared(DEPT_KEY, n);
+  setShared("scp.accent", DEPTS[n].pal.red); // read by scp-spaces for its selection marker
   run("app.theme", { name: DEPTS[n].theme });
 };
 const drilling = () => { const t = Number(shared(DRILL_KEY)) || 0; return t > 0 && Date.now() - t < DRILL_MS; };
@@ -296,6 +307,7 @@ const NOTICE_MS = 12000;
 
 class Footer {
   init(_p, cx) {
+    setShared("scp.accent", DEPTS[deptIdx()].pal.red); // read by scp-spaces for its selection marker
     this.prev = null;      // address -> status, from the last render
     this.incident = null;  // { text, color, at }
     this.notice = Math.floor(Math.random() * NOTICES.length); // which notice shows
