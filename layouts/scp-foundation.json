@@ -1,0 +1,208 @@
+{
+  "id": "root",
+  "type": "column",
+  "titlebar": "none",
+  "traffic_lights": [
+    18,
+    22
+  ],
+  "theme": "scp-foundation",
+  "font": "JetBrains Mono",
+  "ui_font": "Geist",
+  "terminal_padding": [
+    10,
+    8
+  ],
+  "children": [
+    {
+      "id": "header",
+      "type": "block",
+      "size": {
+        "px": 62
+      },
+      "window_drag": true,
+      "content": {
+        "mod": "scp",
+        "props": {
+          "role": "header"
+        }
+      }
+    },
+    {
+      "id": "body",
+      "type": "row",
+      "divider": {
+        "width": 1,
+        "color": "border"
+      },
+      "children": [
+        {
+          "id": "sidebar",
+          "type": "column",
+          "size": {
+            "px": 290
+          },
+          "min": 44,
+          "max": 480,
+          "divider": {
+            "width": 1,
+            "color": "border"
+          },
+          "children": [
+            {
+              "id": "spaces",
+              "type": "block",
+              "content": {
+                "mod": "scp-spaces"
+              }
+            },
+            {
+              "id": "sitemap",
+              "type": "block",
+              "size": {
+                "px": 128
+              },
+              "content": {
+                "mod": "scp",
+                "props": {
+                  "role": "sitemap"
+                }
+              }
+            },
+            {
+              "id": "agents",
+              "type": "block",
+              "content": {
+                "mod": "scp",
+                "props": {
+                  "role": "personnel"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "work",
+          "type": "column",
+          "children": [
+            {
+              "id": "tabs",
+              "type": "block",
+              "size": {
+                "px": 30
+              },
+              "content": {
+                "mod": "scp-tabs"
+              }
+            },
+            {
+              "id": "work-body",
+              "type": "row",
+              "gap": 6,
+              "children": [
+                {
+                  "id": "main",
+                  "type": "block",
+                  "floating": [
+                    {
+                      "id": "stamps",
+                      "content": {
+                        "mod": "scp",
+                        "props": {
+                          "role": "stamp"
+                        }
+                      },
+                      "edge": "bottom",
+                      "align": "end"
+                    }
+                  ],
+                  "content": {
+                    "tab": "active",
+                    "pane": {
+                      "gap": 6,
+                      "radius": 0,
+                      "lone": true,
+                      "background": "background",
+                      "border": {
+                        "width": 1,
+                        "color": "border"
+                      },
+                      "focus": {
+                        "width": 2,
+                        "color": "accent"
+                      },
+                      "header": {
+                        "content": {
+                          "mod": "scp",
+                          "props": {
+                            "role": "pane"
+                          }
+                        },
+                        "height": 30,
+                        "position": "top",
+                        "reveal": "always"
+                      }
+                    }
+                  }
+                },
+                {
+                  "id": "panel",
+                  "type": "column",
+                  "hidden": true,
+                  "size": {
+                    "px": 368
+                  },
+                  "min": 280,
+                  "max": 900,
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  },
+                  "background": "surface",
+                  "children": [
+                    {
+                      "id": "panel-body",
+                      "type": "stack",
+                      "active": "files",
+                      "children": [
+                        {
+                          "id": "files",
+                          "type": "block",
+                          "content": {
+                            "mod": "files"
+                          }
+                        },
+                        {
+                          "id": "changes",
+                          "type": "block",
+                          "content": {
+                            "mod": "changes"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "footer",
+      "type": "block",
+      "size": {
+        "px": 26
+      },
+      "content": {
+        "mod": "scp",
+        "props": {
+          "role": "footer"
+        }
+      }
+    }
+  ],
+  "toast": "scp-toast",
+  "preview": "layouts/scp-foundation.svg"
+}

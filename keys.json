@@ -1,0 +1,11 @@
+{
+  "global": {
+    "ctrl-alt-c": "scp.cycle",
+    "ctrl-alt-i": "scp.archive",
+    "ctrl-alt-p": "scp.article",
+    "ctrl-alt-l": "scp.login",
+    "ctrl-alt-d": "scp.drill",
+    "ctrl-alt-r": "scp.report",
+    "ctrl-alt-t": "scp.dept"
+  }
+}
