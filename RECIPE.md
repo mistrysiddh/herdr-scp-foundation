@@ -20,7 +20,7 @@ A dark terminal layout dressed as a Foundation containment console. A paper-colo
 - **Windows:** ITEM # opens the Special Containment Procedures article; a dossier opens from a personnel file's `FILE` button; closing a terminal pane opens a Termination Order (Enter/Esc).
 - **Login:** a typed boot screen with a keycard scan, at most once per 30 minutes.
 - **Drill:** `scp.drill` stages a 20-second fake breach.
-- **Departments:** the DEPT chip (or `scp.dept`) cycles Foundation, MTF (green), Ethics (blue), O5 (gold) by switching the terminal theme only.
+- **Departments:** the DEPT chip (or `scp.dept`) cycles Foundation, MTF (green), Ethics (blue), O5 (gold). It recolors the whole UI: the terminal theme, the accent, and the paper of headers, windows and memo toasts (O5 turns the paper dark with gold ink). The choice is kept in shared `scp.dept`.
 - **Keys** (`keys.json`, global): ctrl-alt-c cycle, -i archive, -p article, -l login, -d drill, -r report, -t department. ctrl+alt is AltGr on Windows.
 - **Sounds** (`mods/scp/sounds/*.mp3`, generated with ffmpeg tones): breach, contained, tick, stamp, terminate, archive, login, denied.
 
@@ -38,7 +38,7 @@ A dark terminal layout dressed as a Foundation containment console. A paper-colo
 
 - The shipped mods were cloned from Herdr 0.1.x; a newer Herdr will not update the clones.
 - Layout `scp-foundation` needs the hidden `panel` stack or the Files/Changes buttons error with "no node 'panel'".
-- Only the root theme applies; department switching changes the terminal theme, but the red in headers, stamps and borders is fixed.
+- Only the root theme applies, so a department switch runs `app.theme` for the terminal and the scp mod repaints its own colors (`applyDept()` at every render). The scp-toast mod keeps its own copy of the department palettes; keep both in step if you change one.
 - Stamps are not rotated (no rotation support). The `stamp` sound plays when a new stamp appears.
 - The cognitohazard mode only styles the pane header; it does not scramble the terminal.
 - Mod commands (`scp.drill` and the rest) come from `keys.json` or `herdr-app do scp.<name>`.

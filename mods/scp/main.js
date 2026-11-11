@@ -26,12 +26,18 @@ const P = {
   paper: "#d6d6cf", paper2: "#c4c4bc", ink: "#0c0d0d", ink2: "#3a3d3c", rule: "#9a9d96",
   red: "#c8102e", black: "#050606", dark: "#111313", dark2: "#181a1a", edge: "#2a2d2d",
   text: "#d6d6cf", dim: "#7b7f7c", amber: "#d9a21b", green: "#6f9a52", bar: "#26292a",
+  onRed: "#ffffff", darkPaper: false, // set per department by applyDept()
 };
 const MONO = "JetBrains Mono";
 const CLEAR_KEY = "scp.clearance";
 const LOG_KEY = "scp.log"; // [{ n, text, color, at }], the last KEEP incidents
 const LOGIN_KEY = "scp.loginAt"; // ms of the last login screen; one per 30 minutes
 const KEEP = 80;
+// Incident colours are stored by meaning ("red", "amber", "green", "dim") so they follow the
+// department; entries logged before that stored the Foundation hex values, mapped here.
+const LEGACY_COLOR = { "#c8102e": "red", "#d9a21b": "amber", "#6f9a52": "green", "#7b7f7c": "dim" };
+const semantic = (c) => ["red", "amber", "green", "dim"].find((k) => P[k] === c) ?? LEGACY_COLOR[c] ?? c;
+const col = (c) => P[LEGACY_COLOR[c] ?? c] ?? c;
 const logOf = () => (Array.isArray(shared(LOG_KEY)) ? shared(LOG_KEY) : []);
 const stop = (_e, cx) => cx.stop_propagation();
 const two = (n) => String(n).padStart(2, "0");
@@ -47,12 +53,24 @@ const DRILL_KEY = "scp.drill";   // ms when a breach drill began (0 = none)
 const DRILL_MS = 20000;
 const SEEN_KEY = "scp.seen";     // { address: ms first seen }, for time in containment
 const DEPT_KEY = "scp.dept";     // index into DEPTS
+// Each department recolours the whole UI: the accent, the "paper" of headers and windows,
+// and the colour of text drawn on the accent. O5 turns the paper dark with gold ink.
 const DEPTS = [
-  { label: "FOUNDATION", theme: "scp-foundation" },
-  { label: "MTF TACTICAL", theme: "scp-mtf" },
-  { label: "ETHICS COMMITTEE", theme: "scp-ethics" },
-  { label: "O5 COUNCIL", theme: "scp-o5" },
+  { label: "FOUNDATION", theme: "scp-foundation", pal: { red: "#c8102e", onRed: "#ffffff", paper: "#d6d6cf", paper2: "#c4c4bc", ink: "#0c0d0d", ink2: "#3a3d3c", rule: "#9a9d96", black: "#050606", darkPaper: false } },
+  { label: "MTF TACTICAL", theme: "scp-mtf", pal: { red: "#5f8f3f", onRed: "#ffffff", paper: "#cfd6c6", paper2: "#bcc5b0", ink: "#0b0e0a", ink2: "#354031", rule: "#94a089", black: "#050605", darkPaper: false } },
+  { label: "ETHICS COMMITTEE", theme: "scp-ethics", pal: { red: "#4f7f9c", onRed: "#ffffff", paper: "#ccd3d9", paper2: "#b9c2ca", ink: "#0c0e10", ink2: "#36404a", rule: "#8f9aa4", black: "#050607", darkPaper: false } },
+  { label: "O5 COUNCIL", theme: "scp-o5", pal: { red: "#d9a21b", onRed: "#120f05", paper: "#14120a", paper2: "#1f1c10", ink: "#e8d9a0", ink2: "#a89a62", rule: "#4a4122", black: "#2e2814", darkPaper: true } },
 ];
+// Called at the start of every render and init so each role paints with the current department.
+function applyDept() {
+  Object.assign(P, DEPTS[deptIdx()].pal);
+}
+// Blend two #rrggbb colours (t = share of `a`), for accent-tinted dark backgrounds.
+function mix(a, b, t) {
+  const n = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [n(a), n(b)];
+  return "#" + x.map((v, i) => Math.round(v * t + y[i] * (1 - t)).toString(16).padStart(2, "0")).join("");
+}
 const deptIdx = () => Math.min(DEPTS.length - 1, Math.max(0, Math.round(Number(shared(DEPT_KEY)) || 0)));
 const cycleDept = () => {
   const n = (deptIdx() + 1) % DEPTS.length;
@@ -75,19 +93,19 @@ function sfx(name) {
 // THAUMIEL (finished while unseen) > SAFE. Colours are for the paper header.
 function classify(list) {
   const n = (st) => list.filter((a) => a.status === st).length;
-  if (n("blocked") >= 3) return { name: "APOLLYON", color: "#7a0a14" };
-  if (n("blocked")) return { name: "KETER", color: P.red };
-  if (n("working")) return { name: "EUCLID", color: "#8a5d00" };
-  if (n("done")) return { name: "THAUMIEL", color: "#4a3f8f" };
-  return { name: "SAFE", color: "#3f6b27" };
+  const c = (dark, light) => (P.darkPaper ? dark : light);
+  if (n("blocked") >= 3) return { name: "APOLLYON", color: c("#ef3b4f", "#7a0a14") };
+  if (n("blocked")) return { name: "KETER", color: c("#ef6a4a", P.red) };
+  if (n("working")) return { name: "EUCLID", color: c(P.amber, "#8a5d00") };
+  if (n("done")) return { name: "THAUMIEL", color: c("#9d86e0", "#4a3f8f") };
+  return { name: "SAFE", color: c(P.green, "#3f6b27") };
 }
 
-const STAMP = {
+const stampOf = (st) => ({
   working: { text: "UNDER OBSERVATION", color: P.amber },
   blocked: { text: "BREACH", color: P.red },
   done: { text: "RECONTAINED", color: P.green },
-};
-const stampOf = (st) => STAMP[st] ?? { text: "CONTAINED", color: P.dim };
+}[st] ?? { text: "CONTAINED", color: P.dim });
 
 // ---- redaction ---------------------------------------------------------------
 
@@ -176,7 +194,7 @@ class Header {
     const L = level();
 
     const brand = h_flex().gap(10).items_center().flex_none()
-      .child(image("mods/scp/emblem.svg").w(42).h(42).flex_none())
+      .child(svg("mods/scp/emblem.svg").size(42).flex_none().text_color(P.ink)) // tinted, so it reads on dark paper too
       .child(v_flex()
         .child(div().font_family(MONO).font_weight(800).text_size(19).text_color(P.ink).child("SCP FOUNDATION"))
         .child(div().font_family(MONO).text_size(9.5).text_color(P.ink2).child("SECURE · CONTAIN · PROTECT")));
@@ -194,7 +212,7 @@ class Header {
       .child(field("SPECIAL PROCEDURE", redact("r-test", test ? `TEST ${two(test.index)}` : "", { size: 14, need: 3 })));
 
     const alarm = breaches
-      ? div().flex_none().px(10).py(5).bg(P.red).text_color("#ffffff").font_family(MONO).font_weight(800).text_size(12)
+      ? div().flex_none().px(10).py(5).bg(P.red).text_color(P.onRed).font_family(MONO).font_weight(800).text_size(12)
         .loop("opacity", { from: 0.45, to: 1, period: 700 }).child(`⚠ CONTAINMENT BREACH · ${two(breaches)}`)
       : null;
 
@@ -325,9 +343,9 @@ class Footer {
   // One incident: queued for the archive, shown in the footer, optionally with a sound.
   record(text, color, sound) {
     this.count += 1;
-    const entry = { n: this.count, text, color, at: Date.now() };
+    const entry = { n: this.count, text, color: semantic(color), at: Date.now() };
     this.queue.push(entry);
-    this.incident = { text: `INCIDENT ${String(this.count).padStart(3, "0")}-A: ${text}`, color, at: entry.at };
+    this.incident = { text: `INCIDENT ${String(this.count).padStart(3, "0")}-A: ${text}`, color: semantic(color), at: entry.at };
     if (sound) sfx(sound);
   }
 
@@ -394,10 +412,10 @@ class Footer {
       .items_center().px(12).gap(8)
       .child(div().w(7).h(7).rounded(4).flex_none().bg(P.red).loop("opacity", { from: 0.3, to: 1, period: 1600 }))
       .child(txt(`CLEARANCE LEVEL ${level()} · FOUNDATION EYES ONLY`, P.red))
-      .child(div().flex_none().px(6).py(1).bg(cls.color).font_family(MONO).font_weight(800).text_size(10).text_color("#ffffff")
+      .child(div().flex_none().px(6).py(1).bg(cls.color).font_family(MONO).font_weight(800).text_size(10).text_color(P.darkPaper ? "#120f05" : "#ffffff")
         .tooltip("Object class of the shown site").child(cls.name))
       .child(txt("//"))
-      .when(Boolean(inc), (el) => el.child(div().flex_1().min_w(0).truncate().font_family(MONO).font_weight(700).text_size(10.5).text_color(inc.color).child(inc.text)))
+      .when(Boolean(inc), (el) => el.child(div().flex_1().min_w(0).truncate().font_family(MONO).font_weight(700).text_size(10.5).text_color(col(inc.color)).child(inc.text)))
       .when(!inc, (el) => el.child(h_flex().id("notice").flex_1().min_w(0).gap(8).items_center().overflow_hidden()
         .children(NOTICES[this.notice % NOTICES.length].map((part, i) =>
           typeof part === "string" ? txt(part) : bar(`nb-${this.notice}-${i}`, part.r)))))
@@ -439,7 +457,7 @@ class PaneHeader {
     const close = () => (p.terminal ? openTerminate(pane, p.terminal, name) : run("pane.close", { pane }));
 
     return h_flex().id(`scp-pane-${pane}`).size_full().pl(10).pr(4).gap(8).items_center()
-      .bg(haz ? "#2a0a10" : lit ? P.dark2 : P.dark).border_b(1).border_color(lit || haz ? P.red : P.edge)
+      .bg(haz ? mix(P.red, "#0c0d0d", 0.2) : lit ? P.dark2 : P.dark).border_b(1).border_color(lit || haz ? P.red : P.edge)
       .on_hover((h, cx) => { this.hovered = h; cx.notify(); })
       .on_click(() => run("pane.focus", { pane }))
       .child(div().w(7).h(7).flex_none().bg(lit ? P.red : P.edge)
@@ -451,7 +469,7 @@ class PaneHeader {
         .tooltip(`MTF ${unit.full.toUpperCase()} "${unit.nick}"`).child(`MTF ${unit.code}`)))
       .child(div().flex_1().min_w(0).flex().justify_end()
         .child(haz
-          ? div().flex_none().px(6).py(1).font_family(MONO).font_weight(800).text_size(10).text_color("#ffffff").bg(P.red)
+          ? div().flex_none().px(6).py(1).font_family(MONO).font_weight(800).text_size(10).text_color(P.onRed).bg(P.red)
             .tooltip("Cognitohazard: do not read this terminal's output until the breach is resolved")
             .loop("opacity", { from: 0.5, to: 1, period: 500 }).child("⚠ COGNITOHAZARD · DO NOT READ")
           : redact(`rp-${pane}`, folderOf(p.cwd) || "~", { bg: P.bar, reveal: P.text, size: 10.5, need: 2 })))
@@ -529,7 +547,7 @@ class Stamps {
     this.seen = ids;
     if (!idle.length) return div();
     return v_flex().gap(6).p(6)
-      .children(idle.map(({ p, i }) => div().id(`st-${p.pane}`).px(10).py(5).border(2).border_color(P.red).bg("#1a0b0e")
+      .children(idle.map(({ p, i }) => div().id(`st-${p.pane}`).px(10).py(5).border(2).border_color(P.red).bg(mix(P.red, "#0c0d0d", 0.12))
         .cursor_pointer().on_click(() => run("pane.focus", { pane: p.pane }))
         .tooltip("Idle subject: click to focus")
         .loop("opacity", { from: 0.55, to: 1, period: 2400 })
@@ -580,7 +598,7 @@ class Terminate {
       .bg(primary ? P.red : P.paper2).border(1).border_color(primary ? P.red : P.rule)
       .hover((s) => s.opacity(0.85))
       .on_click((_e, cx) => act(cx))
-      .child(div().font_family(MONO).font_weight(800).text_size(12).text_color(primary ? "#ffffff" : P.ink).child(text));
+      .child(div().font_family(MONO).font_weight(800).text_size(12).text_color(primary ? P.onRed : P.ink).child(text));
 
     return v_flex().id("terminate").size_full().bg(P.paper).border(2).border_color(P.ink).overflow_hidden()
       .track_focus(this.handle)
@@ -613,7 +631,10 @@ class Terminate {
 // ---- document windows (Incident Archive, Special Containment Procedures) -----
 
 // Incident colours were chosen for the dark footer; darker equivalents for paper.
-const ON_PAPER = { [P.amber]: "#8a5d00", [P.green]: "#3f6b27", [P.dim]: P.ink2, [P.red]: P.red };
+function onPaper(c) {
+  if (P.darkPaper) return c; // bright colours already read on dark paper
+  return { [P.amber]: "#8a5d00", [P.green]: "#3f6b27", [P.dim]: P.ink2, [P.red]: P.red }[c];
+}
 const clock3 = (ms) => { const d = new Date(ms); return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`; };
 
 /** The title bar of a frameless window: dragging it moves the window, X closes it. */
@@ -642,13 +663,13 @@ class Archive {
       .child(div().font_family(MONO).text_size(10).text_color(P.ink2).child(`INTERVIEW LOG ${String(e.n).padStart(3, "0")}-A · ${clock3(e.at)}`))
       .child(div().font_family(MONO).text_size(12).line_height(1.45).text_color(P.ink)
         .child("INTERVIEWER: State the nature of the incident for the record."))
-      .child(div().font_family(MONO).font_weight(700).text_size(12).line_height(1.45).text_color(ON_PAPER[e.color] ?? P.ink)
+      .child(div().font_family(MONO).font_weight(700).text_size(12).line_height(1.45).text_color(onPaper(col(e.color)) ?? P.ink)
         .child(`SUBJECT: ${sentence(e.text)}`));
     const tab = (id, text, mode) => div().id(id).px(10).py(4).cursor_pointer()
       .bg(this.mode === mode ? P.ink : P.paper2).text_color(this.mode === mode ? P.paper : P.ink)
       .font_family(MONO).font_weight(800).text_size(10)
       .on_click((_e, cx) => { sfx("tick"); this.mode = mode; cx.notify(); }).child(text);
-    const exportBtn = div().id("arch-export").px(10).py(4).cursor_pointer().bg(P.red).text_color("#ffffff")
+    const exportBtn = div().id("arch-export").px(10).py(4).cursor_pointer().bg(P.red).text_color(P.onRed)
       .font_family(MONO).font_weight(800).text_size(10).hover((s) => s.opacity(0.85))
       .tooltip("Write the archive to a text file in the Herdr home (Ctrl+Alt+R)")
       .on_click(() => run("scp.report")).child("FILE REPORT");
@@ -656,7 +677,7 @@ class Archive {
       .child(h_flex().gap(10).items_center()
         .child(div().font_family(MONO).font_weight(800).text_size(11).text_color(P.ink).child(`INCIDENT ${String(e.n).padStart(3, "0")}-A`))
         .child(div().font_family(MONO).text_size(10).text_color(P.ink2).child(clock3(e.at))))
-      .child(div().font_family(MONO).font_weight(700).text_size(12).line_height(1.4).text_color(ON_PAPER[e.color] ?? P.ink).child(e.text));
+      .child(div().font_family(MONO).font_weight(700).text_size(12).line_height(1.4).text_color(onPaper(col(e.color)) ?? P.ink).child(e.text));
 
     return sheet()
       .child(windowBar("INCIDENT ARCHIVE", `FOUNDATION RECORDS · ${two(log.length)} ON FILE · NEWEST FIRST`))
@@ -713,7 +734,7 @@ class Article {
         .child(body(description))
         .child(label("Addendum:"))
         .child(recent.length
-          ? v_flex().gap(6).children(recent.map((e) => div().font_family(MONO).text_size(11).line_height(1.45).text_color(ON_PAPER[e.color] ?? P.ink)
+          ? v_flex().gap(6).children(recent.map((e) => div().font_family(MONO).text_size(11).line_height(1.45).text_color(onPaper(col(e.color)) ?? P.ink)
             .child(`INCIDENT ${String(e.n).padStart(3, "0")}-A (${clock3(e.at)}): ${e.text}`)))
           : body("No incidents on file."))
         .child(div().font_family(MONO).text_size(10).text_color(P.ink2).child("SEE ALSO: INCIDENT ARCHIVE (CTRL+ALT+I). THIS DOCUMENT UPDATES ITSELF.")));
@@ -747,8 +768,8 @@ class Dossier {
             .child(div().absolute().top(0).right(0).w(12).h(12).bg(st.color)))
           .child(v_flex().flex_1().min_w(0).gap(8)
             .child(line("Subject:", div().font_family(MONO).font_weight(800).text_size(15).text_color(P.ink).child(name)))
-            .child(line("Status:", div().px(6).py(1).border(1).border_color(ON_PAPER[st.color] ?? st.color)
-              .font_family(MONO).font_weight(800).text_size(11).text_color(ON_PAPER[st.color] ?? st.color).child(a ? st.text : "LEFT THE FACILITY")))
+            .child(line("Status:", div().px(6).py(1).border(1).border_color(onPaper(st.color) ?? st.color)
+              .font_family(MONO).font_weight(800).text_size(11).text_color(onPaper(st.color) ?? st.color).child(a ? st.text : "LEFT THE FACILITY")))
             .child(line("Task Force:", body(`MTF ${unit.full.toUpperCase()} "${unit.nick.toUpperCase()}" (${unit.code})`)))
             .child(line("In containment:", body(since ? (mins < 1 ? "LESS THAN A MINUTE" : `${mins} MINUTE${mins === 1 ? "" : "S"}`) : "[DATA EXPUNGED]")))))
         .child(div().w_full().h(1).bg(P.rule))
@@ -756,7 +777,7 @@ class Dossier {
         .child(line("Last known location:", redact("d-cwd", folderOf(a?.cwd) || "", { size: 12, need: 3 })))
         .child(label("Incident history:"))
         .child(history.length
-          ? v_flex().gap(6).children(history.map((e) => div().font_family(MONO).text_size(11).line_height(1.45).text_color(ON_PAPER[e.color] ?? P.ink)
+          ? v_flex().gap(6).children(history.map((e) => div().font_family(MONO).text_size(11).line_height(1.45).text_color(onPaper(col(e.color)) ?? P.ink)
             .child(`INCIDENT ${String(e.n).padStart(3, "0")}-A (${clock3(e.at)}): ${e.text}`)))
           : body("No incidents on file for this subject."))
         .child(div().font_family(MONO).text_size(10).text_color(P.ink2).child("THIS FILE UPDATES ITSELF. ITS CONTENTS ARE NOT TO BE REMOVED FROM THE SITE.")));
@@ -766,10 +787,10 @@ class Dossier {
 // ---- machines (this computer and remote sites) -------------------------------
 
 // state -> [label, colour]
-const MACHINE_STATE = {
+const machineState = (st) => ({
   connected: ["ONLINE", P.green], asleep: ["ASLEEP", P.dim], needs_login: ["LOGIN REQUIRED", P.amber],
   unreachable: ["UNREACHABLE", P.red],
-};
+}[st]);
 
 class Machines {
   init(_p, cx) {
@@ -797,7 +818,7 @@ class Machines {
       const ids = new Set(mine.map((s) => s.id));
       const nAgents = all.filter((a) => ids.has(a.space)).length;
       const state = m ? (info?.state ?? "asleep") : "connected";
-      const [label, color] = MACHINE_STATE[state] ?? [String(state).replace(/_/g, " ").toUpperCase(), P.dim];
+      const [label, color] = machineState(state) ?? [String(state).replace(/_/g, " ").toUpperCase(), P.dim];
       const here = mine.some((s) => s.active);
       const login = state === "needs_login" ? `hc machine login ${m}` : null;
       const go = () => {
@@ -841,7 +862,7 @@ class Machines {
 
 // ---- site map (one sector per space) -----------------------------------------
 
-const CLASS_COLOR = { APOLLYON: "#ef3b4f", KETER: P.red, EUCLID: P.amber, THAUMIEL: "#8e6bd6", SAFE: P.green };
+const classColor = (name) => ({ APOLLYON: "#ef3b4f", KETER: P.red, EUCLID: P.amber, THAUMIEL: "#8e6bd6", SAFE: P.green }[name]);
 
 class SiteMap {
   render() {
@@ -850,7 +871,7 @@ class SiteMap {
     const drill = drilling();
     const cell = (s, i) => {
       const cls = classify(all.filter((a) => a.space === s.id));
-      const color = CLASS_COLOR[cls.name] ?? P.dim;
+      const color = classColor(cls.name) ?? P.dim;
       const hot = cls.name === "KETER" || cls.name === "APOLLYON" || (drill && s.active);
       return v_flex().id(`sec-${s.id}`).w(64).h(46).flex_none().px(6).py(4).justify_between().cursor_pointer()
         .bg(s.active ? P.dark2 : "#0e1010").border(1).border_color(s.active ? P.text : P.edge)
@@ -943,12 +964,14 @@ const ROLES = { header: Header, footer: Footer, pane: PaneHeader, personnel: Per
 
 export default class Scp extends View {
   init(p, cx) {
+    applyDept();
     const pr = props() ?? p ?? {};
     const R = ROLES[pr.role];
     this.role = R ? new R() : null;
     this.role?.init?.(pr, cx);
   }
   render(cx) {
+    applyDept();
     return this.role ? this.role.render(cx) : div().child(`scp: no role "${props()?.role}"`);
   }
 }
