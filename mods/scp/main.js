@@ -14,13 +14,14 @@
 // and the Files/Changes panels are Herdr's own mods.
 
 import { View, div, svg, image } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import {
   props, spaces, agents, panes, run, home, shared, setShared, settings, playSound,
   setAgentOrder, openOverlay, closeOverlay, nextCommand, window as appWindow,
-  exec, appHome, writeTextFile, notify, hc,
+  exec, appHome, writeTextFile, notify, hc, knownAgents,
 } from "herdr";
 import { unitOf } from "./mtf.js";
+import { loadIndex, loadArticle, cachedArticle, wikiUrl } from "./wiki.js";
 
 const P = {
   paper: "#d6d6cf", paper2: "#c4c4bc", ink: "#0c0d0d", ink2: "#3a3d3c", rule: "#9a9d96",
@@ -163,6 +164,19 @@ function openDossier(address) {
 
 function openLogin() {
   openOverlay({ mod: "scp", kind: "dialog", modal: true, frame: "none", width: 540, height: 318, props: { role: "login" } });
+}
+
+function openWiki() {
+  openOverlay({ mod: "scp", kind: "window", key: "scp-wiki", frame: "none", width: 720, height: 580, props: { role: "wiki" } });
+}
+
+// Opens one wiki article in the browser (only scp-wiki.wikidot.com/scp-NNN links).
+function openWikiPage(n) {
+  const url = wikiUrl(n);
+  if (!/^https:\/\/scp-wiki\.wikidot\.com\/scp-\d{3}$/.test(url)) return;
+  const pf = appWindow()?.platform;
+  try { Promise.resolve(exec(pf === "macos" ? "open" : pf === "windows" ? "cmd" : "xdg-open", pf === "windows" ? ["/c", "start", "", url] : [url])).catch(() => {}); }
+  catch { /* no opener available */ }
 }
 
 function openArticle() {
@@ -322,6 +336,7 @@ class Footer {
           if (c === "cycle") { sfx("tick"); cycleLevel(); }
           else if (c === "archive") openArchive();
           else if (c === "article") openArticle();
+          else if (c === "wiki") openWiki();
           else if (c === "login") openLogin();
           else if (c === "drill") this.startDrill();
           else if (c === "report") this.exportReport();
@@ -492,6 +507,15 @@ class PaneHeader {
 // ---- personnel files (the agent list) ---------------------------------------
 
 class Personnel {
+  init(_p, cx) {
+    this.known = []; // agents that can be started (programs.json run), installed ones only
+    cx.spawn(async (cx) => {
+      try { this.known = (await knownAgents({})).filter((a) => a.installed && a.run).slice(0, 4); }
+      catch (e) { console.log(`scp: knownAgents failed: ${e}`); }
+      cx.notify();
+    });
+  }
+
   render() {
     const list = agents();
     setAgentOrder(list.map((a) => a.address));
@@ -533,8 +557,17 @@ class Personnel {
         .child(txt("EYES ONLY", P.red, 700, 9.5)))
       .child(v_flex().id("pf-list").w_full().flex_1().min_h(0).overflow_y_scrollbar()
         .children(list.map(file))
-        .when(list.length === 0, (el) => el.child(div().p(14).font_family(MONO).text_size(10.5).text_color(P.dim)
-          .child("NO PERSONNEL ON FILE. START A SUBJECT FROM THE + MENU."))));
+        .when(list.length === 0, (el) => el.child(v_flex().p(14).gap(8)
+          .child(div().font_family(MONO).text_size(10.5).text_color(P.dim).child("NO PERSONNEL ON FILE. ASSIGN A SUBJECT:"))
+          .child(h_flex().gap(6).flex_wrap()
+            .children(this.known.map((a) => div().id(`new-subj-${a.name}`).px(8).py(4).border(1).border_color(P.edge).cursor_pointer()
+              .hover((x) => x.bg(P.dark2)).tooltip(`Start ${a.name} in a new tab`)
+              .on_click(() => { sfx("tick"); run("tab.new", { name: a.name, argv: a.run }); })
+              .child(txt(`+ ${String(a.name).toUpperCase()}`, P.text, 700, 9.5))))
+            .child(div().id("new-subj-shell").px(8).py(4).border(1).border_color(P.edge).cursor_pointer()
+              .hover((x) => x.bg(P.dark2)).tooltip("Open a plain terminal in a new tab")
+              .on_click(() => { sfx("tick"); run("tab.new", {}); })
+              .child(txt("+ TERMINAL", P.text, 700, 9.5)))))));
   }
 }
 
@@ -864,9 +897,124 @@ class Machines {
   }
 }
 
+// ---- quick actions (the key commands, as buttons) ----------------------------
+
+class Actions {
+  render() {
+    const live = drilling();
+    const btn = (id, label, tip, onClick, hot) => div().id(`act-${id}`).flex_1().min_w(0).h(20).flex().items_center().justify_center()
+      .border(1).border_color(hot ? P.red : P.edge).cursor_pointer().hover((x) => x.bg(P.dark2))
+      .tooltip(tip).on_click(() => { sfx("tick"); onClick(); })
+      .child(txt(label, hot ? P.red : P.text, 700, 9));
+    return h_flex().id("scp-actions").size_full().bg(P.dark).border_b(1).border_color(P.edge).px(8).gap(6).items_center()
+      .child(btn("drill", live ? "DRILL \u25cf" : "DRILL", "Stage a 20-second breach drill (Ctrl+Alt+D)", () => run("scp.drill"), live))
+      .child(btn("report", "REPORT", "Write an incident report file (Ctrl+Alt+R)", () => run("scp.report")))
+      .child(btn("dept", "DEPT", "Cycle the department theme (Ctrl+Alt+T)", () => cycleDept()))
+      .child(btn("archive", "ARCHIVE", "Open the Incident Archive (Ctrl+Alt+I)", () => openArchive()))
+      .child(btn("wiki", "WIKI", "Browse the SCP wiki's Content Archives (Ctrl+Alt+W)", () => openWiki()));
+  }
+}
+
+// ---- agent dock (right panel): every agent the system can start --------------
+
+class Dock {
+  init(_p, cx) {
+    this.list = [];      // knownAgents(): { name, run, installed, icon, tint, color, ... }
+    this.state = "loading";
+    const load = (cx) => cx.spawn(async (cx) => {
+      try { this.list = await knownAgents({}); this.state = "ready"; }
+      catch (e) { this.state = this.list.length ? "ready" : "error"; console.log(`scp: dock knownAgents failed: ${e}`); }
+      cx.notify();
+    });
+    load(cx);
+    cx.timer.every(60000, load);
+  }
+
+  // Hyprland-style: a new agent tiles into the current tab, alternating right and down as the tab fills up
+  // (dwindle). Right-click opens it as its own tab instead.
+  launch(a, place) {
+    sfx("tick");
+    const here = spaces().find((s) => s.active);
+    const tab = here?.tabs?.find((t) => t.active) ?? here?.tabs?.[0];
+    const n = panes().filter((p) => tab && p.tab === tab.id).length;
+    const where = place ?? (n === 0 ? "tab" : n % 2 === 1 ? "right" : "down");
+    run("terminal.open", { argv: a.run, name: a.name, place: where });
+  }
+
+  render() {
+    const all = agents();
+    const ready = this.list.filter((a) => a.installed && a.run);
+    const missing = this.list.filter((a) => !(a.installed && a.run));
+    const running = (a) => all.filter((x) => String(x.program?.name ?? "").toLowerCase() === String(a.name).toLowerCase()).length;
+    const row = (a, ok) => {
+      const n = running(a);
+      return h_flex().id(`dock-${a.name}`).w_full().flex_none().h(40).px(10).gap(9).items_center()
+        .border_b(1).border_color(P.edge).when(ok, (el) => el.cursor_pointer().hover((x) => x.bg(P.dark2)))
+        .when(!ok, (el) => el.opacity(0.45))
+        .tooltip(ok ? `Click: tile ${a.name} beside this pane (Hyprland style) · Right-click: new tab` : `${a.name} is not installed on this computer`)
+        .when(ok, (el) => el.on_click(() => this.launch(a)).on_mouse_down("right", () => this.launch(a, "tab")))
+        .child(div().w(2).h(20).flex_none().bg(n > 0 ? P.green : "#00000000"))
+        .child(programIcon(a, 20, a.color ?? P.text))
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          .child(div().truncate().font_family(MONO).font_weight(800).text_size(11).text_color(ok ? P.text : P.dim).child(String(a.name).toUpperCase()))
+          .child(txt(ok ? (n > 0 ? `${two(n)} IN CONTAINMENT` : "READY TO ASSIGN") : "NOT INSTALLED", n > 0 ? P.green : P.dim, 400, 8.5)))
+        .when(ok, (el) => el.child(div().flex_none().w(20).h(20).flex().items_center().justify_center().border(1).border_color(P.edge)
+          .font_family(MONO).font_weight(800).text_size(12).text_color(P.dim).child("+")));
+    };
+    return v_flex().id("dock").size_full().bg(P.dark)
+      .child(h_flex().w_full().h(26).flex_none().px(12).gap(8).items_center().border_b(1).border_color(P.edge)
+        .child(txt("AVAILABLE SUBJECTS", P.text, 700, 10.5))
+        .child(div().flex_1())
+        .child(div().px(5).bg(P.paper).text_color(P.ink).font_family(MONO).font_weight(800).text_size(10).child(two(ready.length))))
+      .child(v_flex().id("dock-list").w_full().flex_1().min_h(0).overflow_y_scrollbar()
+        .when(this.state === "loading", (el) => el.child(div().p(12).child(txt("SCANNING THE SYSTEM…", P.dim, 400, 10))))
+        .when(this.state === "error", (el) => el.child(div().p(12).child(txt("SCAN FAILED. RETRYING SHORTLY.", P.red, 400, 10))))
+        .children(ready.map((a) => row(a, true)))
+        .children(missing.map((a) => row(a, false))))
+      .child(div().w_full().flex_none().px(12).py(6).border_t(1).border_color(P.edge)
+        .child(txt("CLICK: TILE · RIGHT-CLICK: NEW TAB", P.dim, 400, 8.5)));
+  }
+}
+
+// ---- recent incidents (the last few log entries) -------------------------------
+
+class Incidents {
+  render() {
+    const log = logOf();
+    const last = log.slice(-4).reverse();
+    const hhmm = (at) => { const d = new Date(at); return `${two(d.getHours())}:${two(d.getMinutes())}`; };
+    return v_flex().id("incidents").size_full().bg(P.dark).border_b(1).border_color(P.edge)
+      .child(h_flex().w_full().h(26).flex_none().px(12).gap(8).items_center().border_b(1).border_color(P.edge)
+        .child(txt("RECENT INCIDENTS", P.text, 700, 10.5))
+        .child(div().flex_1())
+        .child(div().id("inc-all").cursor_pointer().tooltip("Open the Incident Archive").on_click(() => { sfx("tick"); openArchive(); })
+          .child(txt(`${two(log.length)} LOGGED \u203a`, P.dim, 700, 9.5))))
+      .child(v_flex().flex_1().min_h(0).overflow_hidden().px(12).py(4).gap(2)
+        .when(last.length === 0, (el) => el.child(txt("NO INCIDENTS ON RECORD.", P.dim, 400, 10)))
+        .children(last.map((e, i) => h_flex().id(`inc-${i}`).w_full().gap(6).items_center().cursor_pointer()
+          .on_click(() => { sfx("tick"); openArchive(); })
+          .child(txt(hhmm(e.at), P.dim, 400, 9.5))
+          .child(div().flex_1().min_w(0).truncate().font_family(MONO).text_size(9.5).text_color(col(e.color)).child(e.text)))));
+  }
+}
+
 // ---- site map (one sector per space) -----------------------------------------
 
 const classColor = (name) => ({ APOLLYON: "#ef3b4f", KETER: P.red, EUCLID: P.amber, THAUMIEL: "#8e6bd6", SAFE: P.green }[name]);
+
+// Pane rectangles for a tab of n panes, Hyprland "dwindle" style: the first takes the left half, the next
+// the top of the rest, and so on, alternating. Herdr does not expose real split geometry to mods,
+// so this matches tiles made with the dock (right, down, right, ...) and approximates other splits.
+function dwindle(n, w, h) {
+  const out = [];
+  let r = { x: 0, y: 0, w, h };
+  for (let i = 0; i < n; i++) {
+    if (i === n - 1) { out.push(r); break; }
+    if (i % 2 === 0) { const a = Math.floor(r.w / 2); out.push({ x: r.x, y: r.y, w: a, h: r.h }); r = { x: r.x + a, y: r.y, w: r.w - a, h: r.h }; }
+    else { const a = Math.floor(r.h / 2); out.push({ x: r.x, y: r.y, w: r.w, h: a }); r = { x: r.x, y: r.y + a, w: r.w, h: r.h - a }; }
+  }
+  return out;
+}
 
 class SiteMap {
   render() {
@@ -877,7 +1025,24 @@ class SiteMap {
       const cls = classify(all.filter((a) => a.space === s.id));
       const color = classColor(cls.name) ?? P.dim;
       const hot = cls.name === "KETER" || cls.name === "APOLLYON" || (drill && s.active);
-      return v_flex().id(`sec-${s.id}`).w(64).h(46).flex_none().px(6).py(4).justify_between().cursor_pointer()
+      // a floor plan of the space's shown tab: one tile per pane, laid out as a dwindle tiling
+      const tab = s.tabs.find((t) => t.active) ?? s.tabs[0];
+      const mine = tab ? panes().filter((p) => p.tab === tab.id) : [];
+      const MW = 118, MH = 46;
+      const rects = dwindle(mine.length, MW, MH);
+      const tileColor = (st) => st === "blocked" ? P.red : st === "working" ? P.amber : st === "done" ? P.green : P.edge;
+      const plan = div().relative().w(MW).h(MH).flex_none().bg("#090a0a")
+        .children(mine.map((p, i) => {
+          const r = rects[i];
+          const name = String(p.program?.name ?? p.title ?? "pane").toUpperCase();
+          return div().id(`sec-${s.id}-${p.pane}`).absolute().left(r.x + 1).top(r.y + 1).w(Math.max(4, r.w - 2)).h(Math.max(4, r.h - 2))
+            .flex().items_center().justify_center().bg(P.dark2).border(1).border_color(p.focused && s.active ? P.text : tileColor(p.status))
+            .cursor_pointer().hover((x) => x.bg(P.dark))
+            .tooltip(`${name} · ${stampOf(p.status).text}`)
+            .on_click((_e, cx) => { cx.stop_propagation(); sfx("tick"); run("space.select", { id: s.id }); run("pane.focus", { pane: p.pane }); })
+            .when(r.w >= 26 && r.h >= 20, (el) => el.child(programIcon(p.program, 13, p.program?.color ?? P.dim)));
+        }));
+      return v_flex().id(`sec-${s.id}`).w(130).h(92).flex_none().px(6).py(4).gap(3).cursor_pointer()
         .bg(s.active ? P.dark2 : "#0e1010").border(1).border_color(s.active ? P.text : P.edge)
         .tooltip(`SECTOR ${two(i + 1)} · ${cls.name} · ${s.name}`)
         .hover((x) => x.bg(P.dark2))
@@ -885,7 +1050,10 @@ class SiteMap {
         .child(h_flex().justify_between().items_center()
           .child(txt(`S-${two(i + 1)}`, P.text, 800, 10))
           .child(div().w(7).h(7).flex_none().bg(color).when(hot, (el) => el.loop("opacity", { from: 0.3, to: 1, period: 600 }))))
-        .child(txt(cls.name, color, 800, 8.5));
+        .child(plan)
+        .child(h_flex().justify_between().items_center()
+          .child(txt(cls.name, color, 800, 8.5))
+          .child(txt(`${two(mine.length)} PANE${mine.length === 1 ? "" : "S"}${s.tabs.length > 1 ? ` · ${s.tabs.length} TABS` : ""}`, P.dim, 400, 8)));
     };
     return v_flex().id("sitemap").size_full().bg(P.dark)
       .child(h_flex().w_full().h(26).flex_none().px(12).gap(8).items_center().border_b(1).border_color(P.edge)
@@ -894,6 +1062,162 @@ class SiteMap {
         .child(txt(`${two(list.length)} SECTORS`, P.dim, 700, 9.5)))
       .child(h_flex().id("sec-grid").w_full().flex_1().min_h(0).p(8).gap(6).flex_wrap().content_start().overflow_y_scrollbar()
         .children(list.map(cell)));
+  }
+}
+
+// ---- content archives (the SCP wiki, fetched live) ----------------------------
+
+const WIKI_FAV = "scp.wiki.fav";       // saved SCP numbers
+const WIKI_RECENT = "scp.wiki.recent"; // last opened, newest first
+const RANGES = ["001", "100", "200", "300", "400", "500", "600", "700", "800", "900"];
+
+class Wiki {
+  init(_p, cx) {
+    this.state = "loading"; this.err = ""; this.index = [];
+    this.range = 0; this.q = ""; this.open = null; this.art = null; this.artState = "idle";
+    this.classes = {}; // n -> object class of articles read this session
+    this.view = 0;     // range index, or "recent" / "fav"
+    this.input = InputState.new({ value: "" });
+    this.input.on("change", (_e, cx) => { this.q = this.input.value().trim().toLowerCase(); cx.notify(); });
+    this.input.focus();
+    cx.timer.after(600, () => this.input.focus());
+    cx.spawn(async (cx) => {
+      try { this.index = await loadIndex(); this.state = "ready"; }
+      catch (e) { this.state = "error"; this.err = String(e?.message ?? e); }
+      cx.notify();
+    });
+  }
+
+  favs() { const f = shared(WIKI_FAV); return Array.isArray(f) ? f : []; }
+  recent() { const r = shared(WIKI_RECENT); return Array.isArray(r) ? r : []; }
+
+  show(n, cx) {
+    setShared(WIKI_RECENT, [n, ...this.recent().filter((x) => x !== n)].slice(0, 12));
+    this.open = n; this.art = cachedArticle(n); this.artState = this.art ? "ready" : "loading";
+    if (this.art?.cls) this.classes[n] = this.art.cls;
+    cx.notify();
+    if (this.art) return;
+    cx.spawn(async (cx) => {
+      try { this.art = await loadArticle(n, { exec, appHome }); this.artState = "ready"; if (this.art.cls) this.classes[n] = this.art.cls; }
+      catch (e) { this.artState = "error"; this.err = String(e?.message ?? e); }
+      cx.notify();
+    });
+  }
+
+  chip(name) {
+    const up = String(name).toUpperCase();
+    const c = onPaper(classColor(up)) ?? P.ink2;
+    return div().flex_none().px(5).py(1).border(1).border_color(c).font_family(MONO).font_weight(800).text_size(9.5).text_color(c).child(up);
+  }
+
+  btn(id, label, onClick, solid) {
+    return div().id(id).flex_none().px(10).py(4).cursor_pointer().hover((s) => s.opacity(0.85))
+      .bg(solid ? P.red : P.paper2).text_color(solid ? P.onRed : P.ink).font_family(MONO).font_weight(800).text_size(10)
+      .on_click((_e, cx) => { sfx("tick"); onClick(cx); }).child(label);
+  }
+
+  renderArticle() {
+    const n = this.open;
+    const meta = this.index.find((e) => e.n === n);
+    const a = this.art;
+    const label = (t) => div().font_family(MONO).font_weight(800).text_size(11).text_color(P.ink).child(t);
+    const body = (t) => div().font_family(MONO).text_size(12).line_height(1.55).text_color(P.ink).child(t);
+    const i = this.index.findIndex((e) => e.n === n);
+    const step = (d) => this.index[i + d]?.n;
+    return v_flex().flex_1().min_h(0).w_full()
+      .child(h_flex().w_full().flex_none().px(18).py(6).gap(6).items_center().bg(P.paper2).border_b(1).border_color(P.rule)
+        .child(this.btn("wk-back", "‹ LIST", (cx) => { this.open = null; cx.notify(); }))
+        .child(this.btn("wk-prev", "‹ PREV", (cx) => step(-1) && this.show(step(-1), cx)))
+        .child(this.btn("wk-next", "NEXT ›", (cx) => step(1) && this.show(step(1), cx)))
+        .child(this.btn("wk-fav", this.favs().includes(n) ? "★ SAVED" : "☆ SAVE", (cx) => {
+          const f = this.favs();
+          setShared(WIKI_FAV, f.includes(n) ? f.filter((x) => x !== n) : [...f, n]);
+          cx.notify();
+        }))
+        .child(div().flex_1())
+        .child(this.btn("wk-web", "OPEN ON WIKI", () => openWikiPage(n), true)))
+      .child(v_flex().id(`wk-art-${n}-${this.artState}`).flex_1().min_h(0).w_full().overflow_y_scrollbar().px(22).py(14).gap(10)
+        .child(div().font_family(MONO).font_weight(800).text_size(15).text_color(P.ink).child(`SCP-${n}${meta ? ` · ${meta.title}` : ""}`))
+        .when(this.artState === "loading", (el) => el.child(div().font_family(MONO).text_size(12).text_color(P.ink2)
+          .loop("opacity", { from: 0.3, to: 1, period: 900 }).child("RETRIEVING RECORD FROM THE FOUNDATION DATABASE…")))
+        .when(this.artState === "error", (el) => el.child(body(`RECORD UNAVAILABLE (${this.err}). USE OPEN ON WIKI.`)))
+        .when(this.artState === "ready" && Boolean(a), (el) => {
+          // below the needed clearance a section shows as black bars, word for word
+          const field = (k, v, need) => {
+            if (!v) return [];
+            if (level() >= need) return [label(k), body(v)];
+            return [label(k), div().id(`wk-red-${k.length}`).cursor_pointer().on_click(() => sfx("denied"))
+              .tooltip(`INSUFFICIENT CLEARANCE: LEVEL ${need} REQUIRED`)
+              .font_family(MONO).text_size(12).line_height(1.55).text_color(P.ink).child(v.replace(/\S/g, "█")),
+              txt(`CLEARANCE LEVEL ${need} REQUIRED`, P.red, 800, 10)];
+          };
+          const missing = !a.cls && !a.procedures && !a.description;
+          return el
+            .child(v_flex().gap(6)
+              .child(h_flex().gap(8).items_center().child(label("Item #:")).child(div().font_family(MONO).font_weight(800).text_size(14).text_color(P.ink).child(a.item ?? `SCP-${n}`))
+                .when(Boolean(a.rating), (r) => r.child(div().flex_1()).child(txt(`RATING ${a.rating}`, P.ink2, 700, 10))))
+              .when(Boolean(a.cls), (r) => r.child(h_flex().gap(8).items_center().child(label("Object Class:"))
+                .child(div().flex_none().px(8).py(2).bg(onPaper(classColor(String(a.cls).toUpperCase())) ?? P.ink2)
+                  .font_family(MONO).font_weight(800).text_size(12).text_color(P.paper).child(String(a.cls).toUpperCase())))))
+            .child(div().w_full().h(1).bg(P.rule))
+            .when(missing, (r) => r.child(body("THIS RECORD HAS NO STANDARD FIELDS (A TALE, A HUB OR A NON-STANDARD FORMAT). USE OPEN ON WIKI.")))
+            .children((a.pics ?? []).map((pic, k) => v_flex().id(`wk-pic-${k}`).w_full().gap(3).items_start()
+              .child(image(pic.path).w(300).flex_none())
+              .when(Boolean(pic.caption), (r) => r.child(div().max_w(300).font_family(MONO).text_size(9.5).text_color(P.ink2).child(pic.caption)))))
+            .children(field("Special Containment Procedures:", a.procedures, 2))
+            .children(field("Description:", a.description, 3));
+        })
+        .child(div().w_full().h(1).bg(P.rule))
+        .child(div().font_family(MONO).text_size(9.5).line_height(1.4).text_color(P.ink2)
+          .child(`Source: scp-wiki.wikidot.com/scp-${n} · CC BY-SA 3.0 · authorship is listed on that page.`)));
+  }
+
+  renderList() {
+    const q = this.q;
+    const pick = (list) => list.map((n) => this.index.find((e) => e.n === n)).filter(Boolean);
+    const rows = q
+      ? this.index.filter((e) => `scp-${e.n} ${e.title}`.toLowerCase().includes(q)).slice(0, 200)
+      : this.view === "recent" ? pick(this.recent())
+      : this.view === "fav" ? pick(this.favs())
+      : this.index.filter((e) => Math.floor(Number(e.n) / 100) === this.view);
+    const tab = (r, i) => div().id(`wk-r-${i}`).flex_none().px(7).py(3).cursor_pointer()
+      .bg(!q && this.view === i ? P.ink : P.paper2).text_color(!q && this.view === i ? P.paper : P.ink)
+      .font_family(MONO).font_weight(800).text_size(9.5)
+      .on_click((_e, cx) => { sfx("tick"); this.view = i; cx.notify(); }).child(r);
+    const row = (e) => h_flex().id(`wk-${e.n}`).w_full().flex_none().px(18).py(5).gap(10).items_center().cursor_pointer()
+      .border_b(1).border_color(P.rule).hover((s) => s.bg(P.paper2)).on_click((_e, cx) => { sfx("tick"); this.show(e.n, cx); })
+      .child(div().flex_none().w(66).font_family(MONO).font_weight(800).text_size(11.5).text_color(P.ink).child(`SCP-${e.n}`))
+      .child(div().flex_1().min_w(0).truncate().font_family(MONO).text_size(11.5).text_color(P.ink2).child(e.title))
+      .when(Boolean(this.classes[e.n]), (r) => r.child(this.chip(this.classes[e.n])));
+    return v_flex().flex_1().min_h(0).w_full()
+      .child(h_flex().w_full().flex_none().px(18).py(6).gap(6).items_center().flex_wrap().bg(P.paper2).border_b(1).border_color(P.rule)
+        .children(RANGES.map(tab))
+        .child(div().w(8).flex_none())
+        .child(tab("RECENT", "recent")).child(tab("★ SAVED", "fav")))
+      .child(h_flex().w_full().flex_none().px(18).py(6).gap(8).items_center().border_b(1).border_color(P.rule)
+        .child(txt("FILTER", P.ink2, 800, 10))
+        .child(div().flex_1().min_w(0).child(Input.new(this.input).h(24).px(8).border_1().border_color(P.ink).bg(P.paper).text_size(12).text_color(P.ink)))
+        .child(txt(`${rows.length}${q && rows.length === 200 ? "+" : ""} FOUND`, P.ink2, 700, 9.5)))
+      .child(v_flex().id("wk-list").flex_1().min_h(0).w_full().overflow_y_scrollbar()
+        .children(rows.map(row))
+        .when(rows.length === 0, (el) => el.child(div().p(18).font_family(MONO).text_size(12).text_color(P.ink2).child(this.view === "fav" && !q ? "NOTHING SAVED YET. OPEN A RECORD AND USE ☆ SAVE." : this.view === "recent" && !q ? "NO RECORDS OPENED YET." : "NO RECORDS MATCH.")))
+        .child(div().p(14).font_family(MONO).text_size(9.5).line_height(1.4).text_color(P.ink2)
+          .child("Records are fetched live from the SCP Wiki (scp-wiki.wikidot.com) and cached on this computer. CC BY-SA 3.0.")));
+  }
+
+  render() {
+    const sub = this.state === "ready" ? `SCP WIKI · SERIES 1 · ${this.index.length} RECORDS · LIVE` : "SCP WIKI · CONTACTING DATABASE";
+    return sheet()
+      .child(windowBar("CONTENT ARCHIVES", sub))
+      .when(this.state === "loading", (el) => el.child(div().p(18).font_family(MONO).text_size(12).text_color(P.ink2)
+        .loop("opacity", { from: 0.3, to: 1, period: 900 }).child("RETRIEVING THE ARCHIVE INDEX…")))
+      .when(this.state === "error", (el) => el.child(v_flex().p(18).gap(10)
+        .child(div().font_family(MONO).text_size(12).text_color(P.ink).child(`ARCHIVE UNREACHABLE (${this.err}). CHECK THE CONNECTION.`))
+        .child(this.btn("wk-retry", "RETRY", (cx) => {
+          this.state = "loading"; cx.notify();
+          cx.spawn(async (cx) => { try { this.index = await loadIndex(); this.state = "ready"; } catch (e) { this.state = "error"; this.err = String(e?.message ?? e); } cx.notify(); });
+        }, true))))
+      .when(this.state === "ready", (el) => el.child(this.open ? this.renderArticle() : this.renderList()));
   }
 }
 
@@ -964,7 +1288,7 @@ class Login {
 
 // ---- roles -------------------------------------------------------------------
 
-const ROLES = { header: Header, footer: Footer, pane: PaneHeader, personnel: Personnel, stamp: Stamps, terminate: Terminate, archive: Archive, article: Article, login: Login, dossier: Dossier, sitemap: SiteMap, machines: Machines };
+const ROLES = { header: Header, footer: Footer, pane: PaneHeader, personnel: Personnel, stamp: Stamps, terminate: Terminate, archive: Archive, article: Article, login: Login, dossier: Dossier, sitemap: SiteMap, machines: Machines, actions: Actions, incidents: Incidents, wiki: Wiki, dock: Dock };
 
 export default class Scp extends View {
   init(p, cx) {

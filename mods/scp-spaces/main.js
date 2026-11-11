@@ -5,7 +5,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, agents, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -384,6 +384,18 @@ export default class Spaces extends View {
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
   }
 
+  // Subject count and containment state of a space: OBS (working), BREACH (blocked), RECON (done), SAFE.
+  stateChip(w, t) {
+    const n = agents().filter((a) => a.space === w.id).length;
+    const [label, color] = w.status === "blocked" ? ["BREACH", t.blocked ?? t.ansi1]
+      : w.status === "working" ? ["OBS", t.ansi3]
+      : w.status === "done" ? ["RECON", t.ansi2]
+      : ["SAFE", t.dim];
+    return h_flex().flex_none().gap(5).items_center()
+      .when(n > 0, (el) => el.child(div().text_size(10).text_color(t.dim).tooltip(`${n} subject${n === 1 ? "" : "s"} in this site`).child(`${n}\u00d7`)))
+      .child(div().px(4).py(1).border_1().border_color(color).text_size(8.5).font_bold().text_color(color).child(label));
+  }
+
   row({ w, i, g, tree }, t) {
     const on = w.active;
     const fromIndex = this.pressed === null ? -1 : spaces().findIndex(s => s.id === this.pressed);
@@ -436,8 +448,9 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
           .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
-          .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
+          .child(div().flex_shrink(0).max_w(110).truncate().text_color(t.foreground).child(w.name))
+          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .when(!tree, el => el.child(this.stateChip(w, t))),
       );
   }
 

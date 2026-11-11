@@ -60,7 +60,7 @@
               "id": "machines",
               "type": "block",
               "size": {
-                "px": 120
+                "px": 62
               },
               "content": {
                 "mod": "scp",
@@ -70,10 +70,36 @@
               }
             },
             {
+              "id": "actions",
+              "type": "block",
+              "size": {
+                "px": 30
+              },
+              "content": {
+                "mod": "scp",
+                "props": {
+                  "role": "actions"
+                }
+              }
+            },
+            {
+              "id": "incidents",
+              "type": "block",
+              "size": {
+                "px": 104
+              },
+              "content": {
+                "mod": "scp",
+                "props": {
+                  "role": "incidents"
+                }
+              }
+            },
+            {
               "id": "sitemap",
               "type": "block",
               "size": {
-                "px": 128
+                "px": 148
               },
               "content": {
                 "mod": "scp",
@@ -195,6 +221,23 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "id": "dock",
+                  "type": "block",
+                  "size": {
+                    "px": 200
+                  },
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  },
+                  "content": {
+                    "mod": "scp",
+                    "props": {
+                      "role": "dock"
+                    }
+                  }
                 }
               ]
             }
