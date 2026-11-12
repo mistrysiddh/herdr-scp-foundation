@@ -23,7 +23,10 @@ const DEPT = [
   { accent: "#8b5a2b", paper: "#d2ccc1", ink: "#100e0c", ink2: "#4a4037", strip: "#100e0c", stripText: "#d2ccc1", warn: "#8a5d00", ok: "#3f6b27" },
   { accent: "#a08a2a", paper: "#d5d2c0", ink: "#12100c", ink2: "#4e4a37", strip: "#12100c", stripText: "#d5d2c0", warn: "#8a5d00", ok: "#3f6b27" },
 ];
-const dept = () => DEPT[Math.min(DEPT.length - 1, Math.max(0, Math.round(Number(shared("scp.dept")) || 0)))];
+const deptIdx = () => Math.min(DEPT.length - 1, Math.max(0, Math.round(Number(shared("scp.dept")) || 0)));
+const dept = () => DEPT[deptIdx()];
+// organisation shown on the memo strip (same order as the scp mod's departments)
+const ORG = ["SCP FOUNDATION", "MOBILE TASK FORCE", "ETHICS COMMITTEE", "O5 COUNCIL", "OVERWATCH COMMAND", "INTERNAL SECURITY", "TACTICAL RESPONSE", "RECOVERY & CONTAINMENT", "SITE SECURITY", "ABNORMAL TECHNOLOGIES", "TEMPORAL ANOMALIES", "DISINFORMATION DEPT", "MEDICAL & PSYCHOLOGY", "RESEARCH DIVISION"];
 const levelOf = (D, level) => ({
   error: { tag: "BREACH NOTICE", color: D.accent },
   warning: { tag: "CAUTION", color: D.warn },
@@ -49,7 +52,7 @@ export default class Toast extends View {
       .child(div().w(6).h_full().flex_none().bg(L.color))
       .child(v_flex().flex_1().min_w(0).h_full()
         .child(h_flex().w_full().h(16).flex_none().px(10).items_center().bg(D.strip)
-          .child(div().font_family(MONO).font_weight(800).text_size(9).text_color(D.stripText).child(`${L.tag} · SCP FOUNDATION`)))
+          .child(div().font_family(MONO).font_weight(800).text_size(9).text_color(D.stripText).child(`${L.tag} · ${ORG[deptIdx()] ?? "SCP FOUNDATION"}`)))
         .child(h_flex().flex_1().px(10).gap(10).items_center().min_w(0)
           .when(Boolean(p.icon), (el) => el.child(image(p.icon).w(18).h(18).flex_none()))
           .child(v_flex().flex_1().min_w(0).overflow_hidden()

@@ -18,7 +18,7 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import {
   props, spaces, agents, panes, run, home, shared, setShared, settings, playSound,
   setAgentOrder, openOverlay, closeOverlay, nextCommand, window as appWindow,
-  exec, appHome, writeTextFile, notify, hc, knownAgents,
+  exec, appHome, writeTextFile, readTextFile, notify, hc, knownAgents,
 } from "herdr";
 import { unitOf } from "./mtf.js";
 import { loadIndex, loadArticle, cachedArticle, wikiUrl } from "./wiki.js";
@@ -73,9 +73,40 @@ const DEPTS = [
   { label: "RESEARCH", theme: "scp-research", pal: { red: "#a08a2a", onRed: "#ffffff", paper: "#d5d2c0", paper2: "#c1bfad", ink: "#12100c", ink2: "#4e4a37", rule: "#9b9884", black: "#0b0a06", darkPaper: false } },
 ];
 // Called at the start of every render and init so each role paints with the current department.
+const OPTS_KEY = "scp.opts";
+const OPT_DEFAULTS = { sounds: true, login: true, stamps: true, notices: true, lockdown: true, compact: false, paper: false };
+const opts = () => ({ ...OPT_DEFAULTS, ...(shared(OPTS_KEY) && typeof shared(OPTS_KEY) === "object" ? shared(OPTS_KEY) : {}) });
+// dark surfaces (sidebar blocks, footer) and the paper-mode versions of them
+const BASE_SURFACE = { dark: "#111313", dark2: "#181a1a", edge: "#2a2d2d", text: "#d6d6cf", dim: "#7b7f7c", bar: "#26292a", amber: "#d9a21b", green: "#6f9a52" };
+const PAPER_SURFACE = { dark: "#d6d6cf", dark2: "#c4c4bc", edge: "#9a9d96", text: "#0c0d0d", dim: "#5b5e5c", bar: "#b4b4ac", amber: "#8a5d00", green: "#3f6b27" };
+// lockdown: every surface turns dark red while a subject is in breach
+const LOCK_PAL = { red: "#ff4040", onRed: "#ffffff", paper: "#2a0b0e", paper2: "#3a1216", ink: "#ffd9d9", ink2: "#d98c8c", rule: "#6a2025", black: "#d98c8c", darkPaper: true, dark: "#160708", dark2: "#230b0e", edge: "#5a1d22", bar: "#4a1a1e" };
+const lightPalette = (A) => ({ red: A, onRed: "#ffffff", paper: mix(A, "#dcdcd5", 0.12), paper2: mix(A, "#c6c6bf", 0.12), ink: mix(A, "#0a0a0a", 0.05), ink2: mix(A, "#3a3a3a", 0.2), rule: mix(A, "#9a9a94", 0.15), black: mix(A, "#050505", 0.04), darkPaper: false });
+const isLockdown = () => opts().lockdown && (drilling() || agents().some((a) => a.status === "blocked"));
 function applyDept() {
-  Object.assign(P, DEPTS[deptIdx()].pal);
+  const d = DEPTS[deptIdx()];
+  Object.assign(P, opts().paper ? { ...PAPER_SURFACE, ...lightPalette(d.pal.red) } : { ...BASE_SURFACE, ...d.pal });
+  if (isLockdown()) Object.assign(P, LOCK_PAL);
 }
+// Department wording: organisation name, motto and two extra footer notices each (same order as DEPTS).
+const FLAVOR = [
+  { org: "SCP FOUNDATION", motto: "SECURE · CONTAIN · PROTECT", notices: [] },
+  { org: "MOBILE TASK FORCE", motto: "RESPOND · RECOVER · RETURN", notices: [["MTF UNITS ARE TO ANSWER TO THEIR", { r: "CALLSIGN" }, "ONLY."], ["NINE-TAILED FOX IS ALREADY", { r: "EN ROUTE" }]] },
+  { org: "ETHICS COMMITTEE", motto: "WEIGH · ADVISE · DISSENT", notices: [["THE COMMITTEE HAS NOTED YOUR LAST ACTION AND", { r: "DISAPPROVES" }], ["ALL PROCEDURES ARE SUBJECT TO", { r: "ETHICAL REVIEW" }]] },
+  { org: "O5 COUNCIL", motto: "WE DECIDE. YOU COMPLY.", notices: [["THE COUNCIL DOES NOT", { r: "EXPLAIN ITSELF" }], ["O5-" + "██", "HAS REVIEWED THIS TERMINAL."]] },
+  { org: "OVERWATCH COMMAND", motto: "WATCHING THE WATCHERS", notices: [["OVERWATCH SEES ALL ACTIVITY ON THIS", { r: "CHANNEL" }], ["COMMAND STAFF HAVE BEEN", { r: "NOTIFIED" }]] },
+  { org: "INTERNAL SECURITY", motto: "TRUST NO ONE · VERIFY EVERYONE", notices: [["THIS TERMINAL IS BEING", { r: "MONITORED" }], ["REPORT SUSPICIOUS COLLEAGUES TO", { r: "INTERNAL SECURITY" }]] },
+  { org: "TACTICAL RESPONSE", motto: "FAST · QUIET · DECISIVE", notices: [["RESPONSE TEAMS ARE ON", { r: "STANDBY" }], ["RULES OF ENGAGEMENT ARE", { r: "CLASSIFIED" }]] },
+  { org: "RECOVERY & CONTAINMENT", motto: "FIND · TAKE · HOLD", notices: [["ALL RECOVERED ITEMS MUST BE", { r: "TAGGED" }, "AND LOGGED."], ["DO NOT TOUCH THE ITEM. DO NOT", { r: "LOOK AT THE ITEM" }]] },
+  { org: "SITE SECURITY", motto: "GUARD · LOCK · LOG", notices: [["KEYCARDS ARE TO BE WORN", { r: "AT ALL TIMES" }], ["DOORS ARE LOCKED. THIS IS", { r: "BY DESIGN" }]] },
+  { org: "ABNORMAL TECHNOLOGIES", motto: "UNDERSTAND · BUILD · LABEL", notices: [["THE DEVICE IS NOT A TOY. IT IS ALSO NOT", { r: "A DEVICE" }], ["FIRMWARE UPDATES ARE", { r: "NOT RECOMMENDED" }]] },
+  { org: "TEMPORAL ANOMALIES", motto: "WHEN YOU READ THIS IS NOT NOW", notices: [["THIS NOTICE WAS WRITTEN", { r: "TOMORROW" }], ["IF YOU ARE EARLY, PLEASE", { r: "WAIT" }]] },
+  { org: "DISINFORMATION DEPT", motto: "WHAT PEOPLE KNOW IS OUR CHOICE", notices: [["NOTHING HAPPENED. THERE WAS NO", { r: "INCIDENT" }], ["THE OFFICIAL STORY IS A", { r: "GAS LEAK" }]] },
+  { org: "MEDICAL & PSYCHOLOGY", motto: "TREAT · OBSERVE · SIGN OFF", notices: [["YOUR ANNUAL EVALUATION IS", { r: "OVERDUE" }], ["PLEASE REPORT ANY NEW", { r: "MEMORIES" }]] },
+  { org: "RESEARCH DIVISION", motto: "QUESTION · TEST · LOG", notices: [["PLEASE LOG YOUR TEST RESULTS BEFORE THE", { r: "SUBJECT" }, "DOES."], ["PEER REVIEW IS CONDUCTED BY", { r: "THE SUBJECT" }]] },
+];
+const org = () => FLAVOR[deptIdx()].org;
+const noticeList = () => [...NOTICES, ...FLAVOR[deptIdx()].notices];
 // Blend two #rrggbb colours (t = share of `a`), for accent-tinted dark backgrounds.
 function mix(a, b, t) {
   const n = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -83,11 +114,40 @@ function mix(a, b, t) {
   return "#" + x.map((v, i) => Math.round(v * t + y[i] * (1 - t)).toString(16).padStart(2, "0")).join("");
 }
 const deptIdx = () => Math.min(DEPTS.length - 1, Math.max(0, Math.round(Number(shared(DEPT_KEY)) || 0)));
-const cycleDept = () => {
-  const n = (deptIdx() + 1) % DEPTS.length;
+const themeFor = (n) => DEPTS[n].theme; // the dark half; paper mode owns the light half (see setAppearance)
+// Herdr keeps a light and a dark theme per layout and shows the one that matches the appearance, so the paper
+// terminal works by switching the appearance in settings.json to "light" (and back, restoring what it was).
+async function setAppearance(light) {
+  const path = `${appHome()}/settings.json`;
+  const raw = await readTextFile(path); // null when absent; writeTextFile needs it to detect a stale snapshot
+  let cur = {};
+  try { cur = raw ? JSON.parse(raw) : {}; } catch { cur = {}; }
+  if (light) {
+    if (cur.appearance !== "light") { setShared("scp.prevAppearance", cur.appearance ?? ""); cur.appearance = "light"; }
+  } else if (cur.appearance === "light") {
+    const prev = shared("scp.prevAppearance");
+    if (prev) cur.appearance = prev; else delete cur.appearance;
+  }
+  await writeTextFile(path, JSON.stringify(cur, null, 2) + "\n", raw);
+}
+const setDept = (n) => {
   setShared(DEPT_KEY, n);
   setShared("scp.accent", DEPTS[n].pal.red); // read by scp-spaces for its selection marker
-  run("app.theme", { name: DEPTS[n].theme });
+  run("app.theme", { name: themeFor(n) });
+};
+const cycleDept = () => setDept((deptIdx() + 1) % DEPTS.length);
+const applyCompact = () => {
+  const c = opts().compact;
+  run("layout.resize", { id: "header", px: c ? 44 : 62 });
+  run(c ? "layout.hide" : "layout.show", { id: "incidents" });
+};
+const setOpt = (k, v) => {
+  setShared(OPTS_KEY, { ...opts(), [k]: v });
+  if (k === "paper") {
+    if (v) run("app.theme", { name: "scp-paper" }); // the light half
+    setAppearance(Boolean(v)).catch((e) => console.log(`scp: appearance: ${e}`));
+  }
+  if (k === "compact") applyCompact();
 };
 const drilling = () => { const t = Number(shared(DRILL_KEY)) || 0; return t > 0 && Date.now() - t < DRILL_MS; };
 const seenOf = () => (shared(SEEN_KEY) && typeof shared(SEEN_KEY) === "object" ? shared(SEEN_KEY) : {});
@@ -95,8 +155,10 @@ const seenOf = () => (shared(SEEN_KEY) && typeof shared(SEEN_KEY) === "object" ?
 // ---- sound -------------------------------------------------------------------
 
 function sfx(name) {
-  if (settings()?.sounds?.enabled === false) return;
-  try { playSound(`mods/scp/sounds/${name}.mp3`); } catch (e) { console.log(`scp: sound ${name}: ${e}`); }
+  if (settings()?.sounds?.enabled === false || !opts().sounds) return;
+  // breach and contained have one variant per department; klaxon plays when lockdown begins
+  const file = name === "breach" || name === "contained" ? `${name}-${deptIdx()}` : name;
+  try { playSound(`mods/scp/sounds/${file}.mp3`); } catch (e) { console.log(`scp: sound ${name}: ${e}`); }
 }
 
 // ---- object class ------------------------------------------------------------
@@ -173,8 +235,17 @@ function openDossier(address) {
   openOverlay({ mod: "scp", kind: "window", key: `scp-dossier-${address}`, frame: "none", width: 560, height: 470, props: { role: "dossier", address } });
 }
 
-function openLogin() {
-  openOverlay({ mod: "scp", kind: "dialog", modal: true, frame: "none", width: 540, height: 318, props: { role: "login" } });
+function openDeptPicker() {
+  openOverlay({ mod: "scp", kind: "dialog", modal: true, frame: "none", width: 420, height: 46 + DEPTS.length * 34 + 4, props: { role: "dept" } });
+}
+
+function openOptions() {
+  openOverlay({ mod: "scp", kind: "window", key: "scp-options", frame: "none", width: 520, height: 520, props: { role: "options" } });
+}
+
+function openLogin(force) {
+  // force: "fail" or "pass" for testing; otherwise one login in ten fails
+  openOverlay({ mod: "scp", kind: "dialog", modal: true, frame: "none", width: 660, height: 500, props: { role: "login", force } });
 }
 
 function openWiki() {
@@ -218,11 +289,12 @@ class Header {
     const stardate = `SITE-19 · DAY ${String(day).padStart(3, "0")}`;
     const L = level();
 
+    const compact = opts().compact;
     const brand = h_flex().gap(10).items_center().flex_none()
-      .child(svg("mods/scp/emblem.svg").size(42).flex_none().text_color(P.ink)) // tinted, so it reads on dark paper too
+      .child(svg("mods/scp/emblem.svg").size(compact ? 28 : 42).flex_none().text_color(P.ink)) // tinted, so it reads on dark paper too
       .child(v_flex()
-        .child(div().font_family(MONO).font_weight(800).text_size(19).text_color(P.ink).child("SCP FOUNDATION"))
-        .child(div().font_family(MONO).text_size(9.5).text_color(P.ink2).child("SECURE · CONTAIN · PROTECT")));
+        .child(div().font_family(MONO).font_weight(800).text_size(compact ? 15 : 19).text_color(P.ink).child("SCP FOUNDATION"))
+        .when(!compact, (el) => el.child(div().font_family(MONO).text_size(9.5).text_color(P.ink2).child(FLAVOR[deptIdx()].motto))));
 
     const sep = () => div().w(1).h(34).flex_none().bg(P.rule);
 
@@ -233,8 +305,8 @@ class Header {
         .on_mouse_down("left", stop).on_click(() => { sfx("tick"); openArticle(); })
         .child(item)))
       .child(field("OBJECT CLASS", div().font_family(MONO).font_weight(800).text_size(15).text_color(cls.color).child(cls.name)))
-      .child(field("CONTAINMENT SITE", redact("r-site", space?.name, { size: 14, need: 3 })))
-      .child(field("SPECIAL PROCEDURE", redact("r-test", test ? `TEST ${two(test.index)}` : "", { size: 14, need: 3 })));
+      .when(!compact, (el) => el.child(field("CONTAINMENT SITE", redact("r-site", space?.name, { size: 14, need: 3 })))
+        .child(field("SPECIAL PROCEDURE", redact("r-test", test ? `TEST ${two(test.index)}` : "", { size: 14, need: 3 }))));
 
     const alarm = breaches
       ? div().flex_none().px(10).py(5).bg(P.red).text_color(P.onRed).font_family(MONO).font_weight(800).text_size(12)
@@ -250,16 +322,16 @@ class Header {
 
     const dept = div().id("dept").flex_none().px(8).py(4).border(1).border_color(P.ink).cursor_pointer()
       .font_family(MONO).font_weight(800).text_size(10).text_color(P.ink)
-      .tooltip("Click to switch department: Foundation, MTF, Ethics, O5 (Ctrl+Alt+T). Changes the terminal theme.")
+      .tooltip("Click to pick a department (14 of them). It recolours the whole UI. Ctrl+Alt+T cycles.")
       .hover((s) => s.bg(P.paper2))
-      .on_mouse_down("left", stop).on_click(() => { sfx("tick"); cycleDept(); })
+      .on_mouse_down("left", stop).on_click(() => { sfx("tick"); openDeptPicker(); })
       .child(`DEPT: ${DEPTS[deptIdx()].label}`);
 
     const btn = (id, name, cmd, danger) => div().id(id).w(42).h_full().flex_none().flex().items_center().justify_center()
       .hover((s) => s.bg(danger ? P.red : P.paper2))
       .on_mouse_down("left", stop).on_click(() => run(cmd))
       .child(svg(`mods/scp/icons/${name}.svg`).size(14).flex_none().text_color(P.ink));
-    const settingsBtn = btn("w-set", "settings", "app.settings", false).tooltip("Settings: theme, fonts, sounds, machines");
+    const settingsBtn = btn("w-set", "settings", "scp.options", false).tooltip("Options: sounds, login, stamps, lockdown, compact, paper terminal (Ctrl+Alt+O)");
     const buttons = w?.buttons
       ? h_flex().h_full().flex_none()
         .child(btn("w-min", "win-min", "window.minimize"))
@@ -281,7 +353,7 @@ class Header {
         .child(badge)
         .child(v_flex().flex_none().items_end()
           .child(div().font_family(MONO).font_weight(800).text_size(18).text_color(P.ink).child(clock))
-          .child(div().font_family(MONO).text_size(9).text_color(P.ink2).child(stardate))))
+          .when(!compact, (el) => el.child(div().font_family(MONO).text_size(9).text_color(P.ink2).child(stardate)))))
       .child(settingsBtn)
       .when(Boolean(buttons), (el) => el.child(buttons));
   }
@@ -310,7 +382,7 @@ class Footer {
     setShared("scp.accent", DEPTS[deptIdx()].pal.red); // read by scp-spaces for its selection marker
     this.prev = null;      // address -> status, from the last render
     this.incident = null;  // { text, color, at }
-    this.notice = Math.floor(Math.random() * NOTICES.length); // which notice shows
+    this.notice = Math.floor(Math.random() * noticeList().length); // which notice shows
     this.queue = [];       // entries waiting to be published to shared LOG_KEY
     this.pendingSeen = {}; // address -> ms first seen, waiting to be published to SEEN_KEY
     this.drillActive = false;
@@ -336,10 +408,26 @@ class Footer {
       setShared(LOG_KEY, next);
     });
     // the login screen, once per 30 minutes (scp.login replays it)
-    if (Date.now() - (Number(shared(LOGIN_KEY)) || 0) > 30 * 60 * 1000) {
-      setShared(LOGIN_KEY, Date.now());
-      cx.timer.after(900, () => openLogin());
-    }
+    if (opts().compact) applyCompact(); // the layout remembers sizes, but keep it in step with the option
+    // Herdr starting up: the app was last alive more than 70 seconds ago (or never). A heartbeat every 20 seconds
+    // tells a real start from a layout switch or a mod reload, which must not replay the login.
+    // A start is a new Herdr process: its process id (the parent of a command it runs) differs from the one
+    // saved at the last start, so even an instant restart shows the login. Layout switches and mod reloads keep
+    // the same process and stay quiet. Where the pid cannot be read (Windows), a 10-second heartbeat decides.
+    cx.spawn(async (cx) => {
+      let pid = null;
+      try { const r = await exec("sh", ["-c", "echo $PPID"]); pid = String(r.stdout).trim(); } catch { /* no sh */ }
+      let fresh;
+      if (/^\d+$/.test(pid ?? "")) {
+        fresh = shared("scp.bootPid") !== pid;
+        if (fresh) setShared("scp.bootPid", pid);
+      } else {
+        fresh = Date.now() - (Number(shared("scp.alive")) || 0) > 25000;
+        setShared("scp.alive", Date.now());
+        cx.timer.every(10000, () => setShared("scp.alive", Date.now()));
+      }
+      if (opts().login && fresh) cx.timer.after(900, () => openLogin());
+    });
     // key commands (scp.cycle / scp.archive / scp.article / scp.login) reach this single copy only
     cx.spawn(async (cx) => {
       for (;;) {
@@ -350,10 +438,12 @@ class Footer {
           else if (c === "article") openArticle();
           else if (c === "wiki") openWiki();
           else if (c === "login") openLogin();
+          else if (c === "loginfail") openLogin("fail");
           else if (c === "drill") this.startDrill();
           else if (c === "report") this.exportReport();
           else if (c === "dossier") openDossier(agents()[0]?.address ?? "none");
           else if (c === "dept") { sfx("tick"); cycleDept(); }
+          else if (c === "options") openOptions();
         } catch (e) { console.log(`scp: ${c} failed: ${e}`); }
         cx.notify();
       }
@@ -361,7 +451,7 @@ class Footer {
     // rotate notices only while they are on screen (no incident), to keep redraws rare
     cx.timer.every(NOTICE_MS, (cx) => {
       if (this.incident) return;
-      this.notice = (this.notice + 1) % NOTICES.length;
+      this.notice = (this.notice + 1) % noticeList().length;
       cx.notify();
     });
     cx.timer.every(10000, (cx) => { if (this.incident && Date.now() - this.incident.at > 30000) { this.incident = null; cx.notify(); } });
@@ -389,7 +479,7 @@ class Footer {
     const d = new Date();
     const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
     const text = [
-      "SCP FOUNDATION", "INCIDENT REPORT · FOUNDATION EYES ONLY",
+      org(), `INCIDENT REPORT · ${org()} EYES ONLY`,
       `FILED: ${d.toISOString()}`, `CLEARANCE: LEVEL ${level()}`, `INCIDENTS ON FILE: ${log.length}`, "",
       ...log.map((e) => `INCIDENT ${String(e.n).padStart(3, "0")}-A (${clock3(e.at)}): ${e.text}`),
       "", "END OF REPORT. THIS DOCUMENT DOES NOT EXIST.",
@@ -423,6 +513,9 @@ class Footer {
   render() {
     const all = agents();
     this.watch(all);
+    const lock = isLockdown();
+    if (this.wasLock === false && lock) sfx("klaxon"); // the klaxon sounds once when lockdown begins
+    this.wasLock = lock;
     const n = (st) => all.filter((a) => a.status === st).length;
     const bar = (id, t) => redact(id, t, { bg: P.bar, reveal: P.text, size: 10.5, need: 5 });
     const L = level();
@@ -438,7 +531,7 @@ class Footer {
     return h_flex().id("scp-footer").size_full().bg(P.dark).border_t(1).border_color(P.edge)
       .items_center().px(12).gap(8)
       .child(div().w(7).h(7).rounded(4).flex_none().bg(P.red).loop("opacity", { from: 0.3, to: 1, period: 1600 }))
-      .child(txt(`CLEARANCE LEVEL ${level()} · FOUNDATION EYES ONLY`, P.red))
+      .child(txt(`CLEARANCE LEVEL ${level()} · ${org()} EYES ONLY`, P.red))
       .child(div().flex_none().px(6).py(1).bg(cls.color).font_family(MONO).font_weight(800).text_size(10).text_color(P.darkPaper ? "#120f05" : "#ffffff")
         .tooltip("Object class of the shown site").child(cls.name))
       .when(Boolean(site?.branch), (el) => el.child(h_flex().flex_none().max_w(180).px(6).py(1).gap(5).items_center().border(1).border_color(P.edge)
@@ -448,7 +541,7 @@ class Footer {
       .child(txt("//"))
       .when(Boolean(inc), (el) => el.child(div().flex_1().min_w(0).truncate().font_family(MONO).font_weight(700).text_size(10.5).text_color(col(inc.color)).child(inc.text)))
       .when(!inc, (el) => el.child(h_flex().id("notice").flex_1().min_w(0).gap(8).items_center().overflow_hidden()
-        .children(NOTICES[this.notice % NOTICES.length].map((part, i) =>
+        .children((opts().notices ? noticeList()[this.notice % noticeList().length] : [FLAVOR[deptIdx()].motto]).map((part, i) =>
           typeof part === "string" ? txt(part) : bar(`nb-${this.notice}-${i}`, part.r)))))
       .child(div().id("archive-btn").flex_none().px(6).py(1).border(1).border_color(P.edge).cursor_pointer()
         .tooltip("Open the Incident Archive (Ctrl+Alt+I)").hover((x) => x.bg(P.dark2))
@@ -587,13 +680,22 @@ class Personnel {
 
 // A floating block over the work area: one stamp per idle pane you are not looking at.
 class Stamps {
-  init() { this.hidden = new Set(); } // panes whose stamp was dismissed, until they stop being idle
+  init(_p, cx) {
+    this.hidden = new Set(); // panes whose stamp was dismissed, until they stop being idle
+    this.born = {};          // pane -> ms it started being idle and unfocused
+    cx.timer.every(30000, (cx) => cx.notify()); // stamps change wording with age
+  }
 
   render() {
+    if (!opts().stamps) return div();
     const all = panes();
     const eligible = all.map((p, i) => ({ p, i })).filter(({ p }) => p.terminal && p.status === "idle" && !p.focused);
     // a dismissed stamp stays away only while its pane stays idle and unfocused
     for (const id of [...this.hidden]) if (!eligible.some(({ p }) => p.pane === id)) this.hidden.delete(id);
+    for (const { p } of eligible) this.born[p.pane] ??= Date.now();
+    for (const id of Object.keys(this.born)) if (!eligible.some(({ p }) => p.pane === id)) delete this.born[id];
+    // newest idle stamps read [DATA EXPUNGED]; older ones escalate
+    const stampText = (id) => { const age = Date.now() - (this.born[id] ?? Date.now()); return age < 120000 ? "[DATA EXPUNGED]" : age < 600000 ? "CLASSIFIED" : "TOP SECRET"; };
     const idle = eligible.filter(({ p }) => !this.hidden.has(p.pane)).slice(0, 4);
     // a stamp thump when a new one lands (render only plays a sound, it never notifies)
     const ids = new Set(idle.map(({ p }) => p.pane));
@@ -615,7 +717,7 @@ class Stamps {
         .tooltip("Idle subject: click to focus")
         .child(div().flex_1().loop("opacity", { from: 0.55, to: 1, period: 2400 })
           .font_family(MONO).font_weight(800).text_size(12).text_color(P.red)
-          .child(`DOC-${String(i + 1).padStart(3, "0")} · [DATA EXPUNGED]`))
+          .child(`DOC-${String(i + 1).padStart(3, "0")} · ${stampText(p.pane)}`))
         .child(dismiss(`st-x-${p.pane}`, "Dismiss this stamp", () => this.hidden.add(p.pane)))));
   }
 }
@@ -786,7 +888,7 @@ class Article {
       : `${item} is an empty workspace. Its previous occupants are [DATA EXPUNGED].`;
 
     return sheet()
-      .child(windowBar("SPECIAL CONTAINMENT PROCEDURES", `${item} · FOUNDATION EYES ONLY`))
+      .child(windowBar("SPECIAL CONTAINMENT PROCEDURES", `${item} · ${org()} EYES ONLY`))
       .child(v_flex().id("art-body").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(22).py(16).gap(12)
         .child(line("Item #:", colored(item, P.ink)))
         .child(line("Object Class:", colored(cls.name, cls.color)))
@@ -823,7 +925,7 @@ class Dossier {
     const line = (k, v) => h_flex().gap(8).items_center().flex_wrap().child(label(k)).child(v);
 
     return sheet()
-      .child(windowBar("PERSONNEL FILE", `SUBJECT-${String(address).toUpperCase()} · FOUNDATION EYES ONLY`))
+      .child(windowBar("PERSONNEL FILE", `SUBJECT-${String(address).toUpperCase()} · ${org()} EYES ONLY`))
       .child(v_flex().id("dos-body").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(22).py(16).gap(12)
         .child(h_flex().gap(16).items_start()
           .child(div().relative().w(84).h(100).flex_none().flex().items_center().justify_center()
@@ -944,6 +1046,30 @@ class Actions {
 
 // ---- agent dock (right panel): every agent the system can start --------------
 
+// Install commands, taken from each project's own docs (checked November 2026). `all` works on every system;
+// otherwise `unix` is for macOS and Linux and `windows` for Windows. An agent with no entry for this system
+// gets no install button (Kimi, Grok, DeepSeek and Pig have no confirmed command).
+const INSTALLERS = {
+  codex: { src: "github.com/openai/codex", unix: "curl -fsSL https://chatgpt.com/codex/install.sh | sh", windows: "npm install -g @openai/codex" },
+  gemini: { src: "geminicli.com/docs/get-started/installation", all: "npm install -g @google/gemini-cli" },
+  opencode: { src: "opencode.ai/docs", unix: "curl -fsSL https://opencode.ai/install | bash", windows: "npm install -g opencode-ai" },
+  cursor: { src: "cursor.com/docs/cli/installation", unix: "curl https://cursor.com/install -fsS | bash", windows: "irm 'https://cursor.com/install?win32=true' | iex" },
+  copilot: { src: "docs.github.com/copilot (Install Copilot CLI)", all: "npm install -g @github/copilot" },
+  amp: { src: "ampcode.com/manual", unix: "curl -fsSL https://ampcode.com/install.sh | bash" },
+  crush: { src: "github.com/charmbracelet/crush", all: "npm install -g @charmland/crush" },
+  kiro: { src: "kiro.dev/docs/cli/installation", unix: "curl -fsSL https://cli.kiro.dev/install | bash", windows: "irm 'https://cli.kiro.dev/install.ps1' | iex" },
+  pi: { src: "github.com/badlogic/pi-mono", all: "npm install -g @mariozechner/pi-coding-agent" },
+  qoder: { src: "docs.qoder.com/cli/installation", unix: "curl -fsSL https://qoder.com/install | bash", windows: "npm install -g @qoder-ai/qodercli" },
+  jcode: { src: "github.com/1jehuang/jcode", unix: "curl -fsSL https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.sh | bash", windows: "irm https://raw.githubusercontent.com/1jehuang/jcode/master/scripts/install.ps1 | iex" },
+};
+const SYSTEM = () => appWindow()?.platform ?? "linux"; // "linux" | "macos" | "windows"
+const SYSTEM_LABEL = { linux: "LINUX", macos: "MACOS", windows: "WINDOWS" };
+const installFor = (name) => {
+  const s = INSTALLERS[String(name).toLowerCase()];
+  const cmd = s && (s.all ?? (SYSTEM() === "windows" ? s.windows : s.unix));
+  return cmd ? { cmd, src: s.src } : null;
+};
+
 class Dock {
   init(_p, cx) {
     this.list = [];      // knownAgents(): { name, run, installed, icon, tint, color, ... }
@@ -968,6 +1094,37 @@ class Dock {
     run("terminal.open", { argv: a.run, name: a.name, place: where });
   }
 
+  // Opens a tab that shows the system, the source and the exact command, and runs it only if you answer y.
+  install(a) {
+    const spec = installFor(a.name);
+    if (!spec) return;
+    sfx("tick");
+    const win = SYSTEM() === "windows";
+    const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+    const argv = win
+      ? ["powershell", "-NoProfile", "-Command", [
+          "& { param($n,$c,$s)",
+          "Clear-Host; Write-Host \"INSTALL $n\"",
+          "Write-Host \"System : Windows $env:PROCESSOR_ARCHITECTURE\"; Write-Host \"Source : $s\"; Write-Host \"Command: $c\"; Write-Host \"\"",
+          "if ($c -like 'npm*' -and -not (Get-Command npm -ErrorAction SilentlyContinue)) { Write-Host 'Node.js/npm not found. Install Node.js first (https://nodejs.org), then try again.'; Read-Host 'Press Enter to close'; return }",
+          "$a = Read-Host 'Run it? [y/N]'",
+          "if ($a -match '^[yY]') { Invoke-Expression $c; Write-Host ''; Write-Host 'Finished. Open a new tab if the command is not found.' } else { Write-Host 'Cancelled.' }",
+          `Read-Host 'Press Enter to close' } ${q(a.name)} ${q(spec.cmd)} ${q(spec.src)}`,
+        ].join("; ")]
+      : ["sh", "-c", [
+          "clear",
+          "printf 'INSTALL %s\\n' \"$1\"",
+          "printf 'System : %s %s\\n' \"$(uname -s)\" \"$(uname -m)\"",
+          "printf 'Source : %s\\n' \"$3\"",
+          "printf 'Command: %s\\n\\n' \"$2\"",
+          "case \"$2\" in npm*) command -v npm >/dev/null 2>&1 || { echo 'Node.js/npm not found. Install Node.js first (https://nodejs.org), then try again.'; printf 'Press Enter to close. '; read _; exit 1; };; esac",
+          "printf 'Run it? [y/N] '; read a",
+          "case \"$a\" in y|Y) eval \"$2\"; rc=$?; echo; echo \"Finished (exit code $rc). Open a new tab if the command is not found.\";; *) echo Cancelled.;; esac",
+          "printf 'Press Enter to close. '; read _",
+        ].join("\n"), "sh", a.name, spec.cmd, spec.src];
+    run("terminal.open", { argv, name: `Install ${a.name}`, place: "tab" });
+  }
+
   render() {
     const all = agents();
     const ready = this.list.filter((a) => a.installed && a.run);
@@ -975,18 +1132,29 @@ class Dock {
     const running = (a) => all.filter((x) => String(x.program?.name ?? "").toLowerCase() === String(a.name).toLowerCase()).length;
     const row = (a, ok) => {
       const n = running(a);
+      const spec = ok ? null : installFor(a.name);
       return h_flex().id(`dock-${a.name}`).w_full().flex_none().h(40).px(10).gap(9).items_center()
         .border_b(1).border_color(P.edge).when(ok, (el) => el.cursor_pointer().hover((x) => x.bg(P.dark2)))
-        .when(!ok, (el) => el.opacity(0.45))
-        .tooltip(ok ? `Click: tile ${a.name} beside this pane (Hyprland style) · Right-click: new tab` : `${a.name} is not installed on this computer`)
+        .tooltip(ok ? `Click: tile ${a.name} beside this pane (Hyprland style) · Right-click: new tab`
+          : spec ? `${a.name} is not installed on this computer. INSTALL shows the command for ${SYSTEM_LABEL[SYSTEM()] ?? SYSTEM()} and asks before running it.`
+          : `${a.name} is not installed, and there is no verified install command for ${SYSTEM_LABEL[SYSTEM()] ?? SYSTEM()}.`)
         .when(ok, (el) => el.on_click(() => this.launch(a)).on_mouse_down("right", () => this.launch(a, "tab")))
-        .child(div().w(2).h(20).flex_none().bg(n > 0 ? P.green : "#00000000"))
-        .child(programIcon(a, 20, a.color ?? P.text))
-        .child(v_flex().flex_1().min_w(0).gap(1)
-          .child(div().truncate().font_family(MONO).font_weight(800).text_size(11).text_color(ok ? P.text : P.dim).child(String(a.name).toUpperCase()))
-          .child(txt(ok ? (n > 0 ? `${two(n)} IN CONTAINMENT` : "READY TO ASSIGN") : "NOT INSTALLED", n > 0 ? P.green : P.dim, 400, 8.5)))
+        .child(h_flex().flex_1().min_w(0).gap(9).items_center().when(!ok, (el) => el.opacity(0.5))
+          .child(div().w(2).h(20).flex_none().bg(n > 0 ? P.green : "#00000000"))
+          .child(programIcon(a, 20, a.color ?? P.text))
+          .child(v_flex().flex_1().min_w(0).gap(1)
+            .child(div().truncate().font_family(MONO).font_weight(800).text_size(11).text_color(ok ? P.text : P.dim).child(String(a.name).toUpperCase()))
+            .child(txt(ok ? (n > 0 ? `${two(n)} IN CONTAINMENT` : "READY TO ASSIGN") : "NOT INSTALLED", n > 0 ? P.green : P.dim, 400, 8.5))))
         .when(ok, (el) => el.child(div().flex_none().w(20).h(20).flex().items_center().justify_center().border(1).border_color(P.edge)
-          .font_family(MONO).font_weight(800).text_size(12).text_color(P.dim).child("+")));
+          .font_family(MONO).font_weight(800).text_size(12).text_color(P.dim).child("+")))
+        .when(Boolean(spec), (el) => el.child(div().id(`dock-install-${a.name}`).flex_none().px(6).py(3).border(1).border_color(P.text).cursor_pointer()
+          .hover((x) => x.bg(P.text).text_color(P.dark))
+          .tooltip(`Install ${a.name} on ${SYSTEM_LABEL[SYSTEM()] ?? SYSTEM()}: ${spec?.cmd}`)
+          .font_family(MONO).font_weight(800).text_size(8.5).text_color(P.text)
+          .on_mouse_down("left", stop)
+          .on_click((_e, cx) => { cx.stop_propagation(); this.install(a); })
+          .child("INSTALL")))
+        .when(!ok && !spec, (el) => el.child(txt("NO INSTALLER", P.dim, 400, 8)));
     };
     return v_flex().id("dock").size_full().bg(P.dark)
       .child(h_flex().w_full().h(26).flex_none().px(12).gap(8).items_center().border_b(1).border_color(P.edge)
@@ -999,7 +1167,8 @@ class Dock {
         .children(ready.map((a) => row(a, true)))
         .children(missing.map((a) => row(a, false))))
       .child(div().w_full().flex_none().px(12).py(6).border_t(1).border_color(P.edge)
-        .child(txt("CLICK: TILE · RIGHT-CLICK: NEW TAB", P.dim, 400, 8.5)));
+        .child(txt("CLICK: TILE · RIGHT-CLICK: NEW TAB", P.dim, 400, 8.5))
+        .child(txt(`SYSTEM: ${SYSTEM_LABEL[SYSTEM()] ?? SYSTEM()} · INSTALLERS ARE ASKED BEFORE THEY RUN`, P.dim, 400, 8)));
   }
 }
 
@@ -1058,7 +1227,7 @@ class SiteMap {
       const MW = 118, MH = 46;
       const rects = dwindle(mine.length, MW, MH);
       const tileColor = (st) => st === "blocked" ? P.red : st === "working" ? P.amber : st === "done" ? P.green : P.edge;
-      const plan = div().relative().w(MW).h(MH).flex_none().bg("#090a0a")
+      const plan = div().relative().w(MW).h(MH).flex_none().bg(P.dark)
         .children(mine.map((p, i) => {
           const r = rects[i];
           const name = String(p.program?.name ?? p.title ?? "pane").toUpperCase();
@@ -1070,7 +1239,7 @@ class SiteMap {
             .when(r.w >= 26 && r.h >= 20, (el) => el.child(programIcon(p.program, 13, p.program?.color ?? P.dim)));
         }));
       return v_flex().id(`sec-${s.id}`).w(130).h(92).flex_none().px(6).py(4).gap(3).cursor_pointer()
-        .bg(s.active ? P.dark2 : "#0e1010").border(1).border_color(s.active ? P.text : P.edge)
+        .bg(s.active ? P.dark2 : P.dark).border(1).border_color(s.active ? P.text : P.edge)
         .tooltip(`SECTOR ${two(i + 1)} · ${cls.name} · ${s.name}`)
         .hover((x) => x.bg(P.dark2))
         .on_click(() => { sfx("tick"); run("space.select", { id: s.id }); })
@@ -1248,74 +1417,273 @@ class Wiki {
   }
 }
 
+// ---- department picker ---------------------------------------------------------
+
+class DeptPicker {
+  render() {
+    const cur = deptIdx();
+    return sheet()
+      .child(windowBar("DEPARTMENT", "SELECT YOUR AFFILIATION · RECOLOURS THE WHOLE UI"))
+      .child(v_flex().id("dp-list").flex_1().min_h(0).w_full().overflow_y_scrollbar()
+        .children(DEPTS.map((d, i) => h_flex().id(`dp-${i}`).w_full().flex_none().h(34).px(18).gap(12).items_center().cursor_pointer()
+          .border_b(1).border_color(P.rule).bg(i === cur ? P.paper2 : P.paper).hover((x) => x.bg(P.paper2))
+          .on_click(() => { sfx("tick"); setDept(i); closeOverlay(props()?.overlay); })
+          .child(div().w(14).h(14).flex_none().bg(d.pal.red).border(1).border_color(P.ink))
+          .child(div().w(14).h(14).flex_none().bg(d.pal.paper).border(1).border_color(P.ink))
+          .child(div().flex_1().min_w(0).truncate().font_family(MONO).font_weight(i === cur ? 800 : 600).text_size(12).text_color(P.ink).child(d.label))
+          .when(i === cur, (el) => el.child(txt("CURRENT", P.red, 800, 9.5))))));
+  }
+}
+
+// ---- options ------------------------------------------------------------------
+
+const OPTION_ROWS = [
+  ["sounds", "SOUNDS", "Alarms, stamps, keycard and the per-department tones"],
+  ["login", "KEYCARD LOGIN", "The typed boot screen, at most once per 30 minutes"],
+  ["stamps", "DATA EXPUNGED STAMPS", "Floating stamps over idle panes"],
+  ["notices", "ROTATING NOTICES", "Footer notices; off shows the department motto"],
+  ["lockdown", "LOCKDOWN MODE", "The whole UI turns red while any subject is in breach"],
+  ["compact", "COMPACT LAYOUT", "Shorter header, no incident list, tighter site rows"],
+  ["paper", "PAPER TERMINAL", "A light, document-style look: switches Herdr's appearance to light (settings.json)"],
+];
+
+class Options {
+  render() {
+    const o = opts();
+    const row = ([key, label, desc]) => h_flex().id(`op-${key}`).w_full().flex_none().px(20).py(10).gap(12).items_center().cursor_pointer()
+      .border_b(1).border_color(P.rule).hover((x) => x.bg(P.paper2))
+      .on_click(() => { sfx("tick"); setOpt(key, !o[key]); })
+      .child(v_flex().flex_1().min_w(0).gap(2)
+        .child(div().font_family(MONO).font_weight(800).text_size(12).text_color(P.ink).child(label))
+        .child(div().font_family(MONO).text_size(10).text_color(P.ink2).child(desc)))
+      .child(div().flex_none().w(46).py(3).flex().items_center().justify_center().border(1).border_color(P.ink)
+        .bg(o[key] ? P.ink : P.paper).font_family(MONO).font_weight(800).text_size(10).text_color(o[key] ? P.paper : P.ink)
+        .child(o[key] ? "ON" : "OFF"));
+    const link = (id, text, onClick) => div().id(id).px(10).py(5).cursor_pointer().bg(P.ink).text_color(P.paper)
+      .font_family(MONO).font_weight(800).text_size(10).hover((x) => x.opacity(0.85))
+      .on_click(() => { sfx("tick"); onClick(); }).child(text);
+    return sheet()
+      .child(windowBar("OPTIONS", `${DEPTS[deptIdx()].label} · CLEARANCE LEVEL ${level()}`))
+      .child(v_flex().id("op-list").flex_1().min_h(0).w_full().overflow_y_scrollbar().children(OPTION_ROWS.map(row)))
+      .child(h_flex().w_full().flex_none().px(20).py(10).gap(8).items_center().bg(P.paper2).border_t(1).border_color(P.rule)
+        .child(link("op-dept", "DEPARTMENT ›", () => openDeptPicker()))
+        .child(link("op-herdr", "HERDR SETTINGS ›", () => run("app.settings")))
+        .child(div().flex_1())
+        .child(txt("CTRL+ALT+O", P.ink2, 700, 9.5)));
+  }
+}
+
 // ---- login screen ------------------------------------------------------------
 
 // A terminal boot sequence typed in line by line; Enter, a click or 5 seconds later dismisses it.
+const BAD = "#ff4d4d"; // failure red, the same in every department
+
+// A different, believable bypass command each time: a real-looking tool, target, token and flags.
+// Only plain lowercase letters, digits and a few symbols, so it is easy to type exactly.
+function bypassCommand() {
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const hex = (n) => Array.from({ length: n }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+  const tool = pick(["bypass", "override", "unlock", "authkill", "keyforge"]);
+  const target = pick(["auth.d", "keycard.sys", "door-ctl", "site19-gate", "badge-svc"]);
+  const tok = `${hex(4)}-${hex(4)}`;
+  const lvl = pick([3, 4, 5]);
+  return pick([
+    `sudo ./${tool} --target ${target} --token ${tok} --force`,
+    `./${tool} -t ${target} --clearance=${lvl} --no-trace`,
+    `sudo ./${tool} --keycard spoof --token ${tok} --level ${lvl}`,
+    `./${tool} --inject ${target} --key ${tok} --silent`,
+  ]);
+}
+
 class Login {
   init(_p, cx) {
-    this.shown = 0;
-    this.total = 8;
+    const force = (props() ?? {}).force;
+    this.fail = force ? force === "fail" : Math.random() < 0.1; // one login in ten fails
+    this.lines = [];   // what is on screen
+    this.q = [];       // steps still to play
+    this.cur = null;   // the step being typed or spun
+    this.wait = 0;     // ms before the next step
+    this.phase = "login"; // login | bypass | hack | done
+    this.attempts = 0;
+    this.closeAt = 0;
+    this.command = bypassCommand();
     this.handle = cx.focus_handle();
     this.handle.focus();
-    this.doneAt = 0;
-    cx.timer.every(430, (cx) => {
-      if (this.shown >= this.total) {
-        if (this.doneAt && Date.now() - this.doneAt > 5000) this.close();
-        return;
-      }
-      this.shown += 1;
-      sfx(this.shown === this.total ? "login" : "tick");
-      if (this.shown === this.total) this.doneAt = Date.now();
-      cx.notify();
-    });
+    this.input = InputState.new({ value: "" });
+    this.input.on("submit", (_e, cx) => this.submit(cx));
+
+    const pt = (t, c, w, sz) => ({ t, c, w, s: sz });
+    this.pt = pt;
+    const L = (parts, wait = 250, extra = {}) => ({ kind: "line", parts, wait, ...extra });
+    const T = (prompt, text, { mask = false, cps = 11, wait = 300 } = {}) => ({ kind: "type", prompt, text, mask, cps, wait });
+    const S = (label, ms, after, wait = 200) => ({ kind: "spin", label, ms, after, wait });
+    const F = (fn, wait = 0) => ({ kind: "fn", fn, wait });
+    this.mk = { L, T, S, F };
+
+    this.q = [
+      L([pt("FOUNDATION SECURE TERMINAL · BUILD 4.2.1", P.dim)], 150),
+      L([pt("SITE-19 ACCESS NODE · AUTHORIZED PERSONNEL ONLY", P.dim)], 250),
+      T("login:", "researcher", { cps: 16, wait: 300 }),
+      T("password:", "************", { mask: true, cps: 22, wait: 180 }),
+      S("AUTHENTICATING", 1100, null),
+      F(() => this.verdict()),
+    ];
+    cx.timer.every(50, (cx) => this.tick(cx));
   }
 
   close() { closeOverlay(props()?.overlay); }
 
-  render() {
-    const space = spaces().find((s) => s.active);
-    const tests = space?.tabs.length ?? 0;
-    const L = level();
-    const ok = (t, c = P.green) => txt(t, c, 800, 11);
+  trim() { if (this.lines.length > 13) this.lines.splice(0, this.lines.length - 13); } // the console scrolls
+
+  // plays the queued steps: lines appear, text types itself, spinners spin
+  tick(cx) {
+    const now = Date.now();
+    const dt = Math.min(400, now - (this.last ?? now)); // real elapsed time: the timer may run slower than asked
+    this.last = now;
+    if (this.closeAt && now > this.closeAt) return this.close();
+    const c = this.cur;
+    if (c) {
+      if (c.kind === "type") {
+        c.acc += (c.cps * dt) / 1000;
+        const n = Math.min(c.text.length, Math.floor(c.acc));
+        if (n !== c.line.text.length) { c.line.text = c.text.slice(0, n); if (n % 3 === 0) sfx("tick"); cx.notify(); }
+        if (n >= c.text.length) { c.line.typing = false; this.cur = null; cx.notify(); }
+      } else if (c.kind === "spin") {
+        c.left -= dt;
+        if (c.left <= 0) { c.line.spin = false; if (c.after) c.line.parts = [...c.line.parts, ...c.after]; this.cur = null; cx.notify(); }
+      }
+      return;
+    }
+    if (this.wait > 0) { this.wait -= dt; return; }
+    const st = this.q.shift();
+    if (!st) return;
+    this.wait = st.wait ?? 0;
+    if (st.kind === "line") { this.lines.push({ parts: st.parts, custom: st.custom, blink: st.blink }); }
+    else if (st.kind === "type") {
+      const line = { prompt: st.prompt, text: "", mask: st.mask, typing: true, parts: [] };
+      this.lines.push(line); this.cur = { kind: "type", line, text: st.text, cps: st.cps, acc: 0 };
+    } else if (st.kind === "spin") {
+      const line = { parts: [this.pt(st.label, P.text)], spin: true };
+      this.lines.push(line); this.spinLine = line; this.cur = { kind: "spin", line, left: st.ms, after: st.after };
+    } else if (st.kind === "fn") st.fn();
+    this.trim();
+    cx.notify();
+  }
+
+  // the login has been "checked": one time in ten it fails and needs a manual bypass
+  verdict() {
+    const { L, S, F } = this.mk; const pt = this.pt;
+    if (this.fail) {
+      this.spinLine.parts = [pt("AUTHENTICATING", P.text), pt("[ FAILED ]", BAD, 800)];
+      sfx("denied");
+      this.q.push(
+        L([pt("KEYCARD HASH MISMATCH · ERROR 0x7E3 · TRACE INITIATED", BAD, 700)], 300),
+        L([pt("ACCESS DENIED", BAD, 800, 22)], 400, { blink: true }),
+        L([pt("AUTOMATED LOGIN HAS FAILED. MANUAL OVERRIDE REQUIRED.", P.amber, 700)], 800),
+        L([pt("A HUMAN MUST BREAK IN. TYPE THIS COMMAND EXACTLY:", P.dim)], 500),
+        L([pt("$", P.dim), pt(this.command, P.amber, 800, 13)], 300),
+        F(() => { this.phase = "bypass"; this.input.focus(); }),
+      );
+    } else {
+      this.spinLine.parts = [pt("AUTHENTICATING", P.text), pt("[ OK ]", P.green, 800)];
+      this.q.push(...this.successSteps());
+    }
+  }
+
+  successSteps(label) {
+    const { L, F } = this.mk; const pt = this.pt;
+    const space = () => spaces().find((s) => s.active);
     const bar = (id, t) => redact(id, t, { bg: P.bar, reveal: P.text, size: 11, need: 3 });
     const row = (...kids) => h_flex().gap(8).items_center().children(kids);
-
-    const lines = [
-      row(txt("FOUNDATION SECURE TERMINAL · BUILD 4.2.1", P.dim, 400, 11)),
-      row(txt("AUTHENTICATING…", P.text, 400, 11), ok("[ OK ]")),
+    return [
       // the keycard slides through the reader, then the line resolves
-      row(txt("KEYCARD SCAN", P.text, 400, 11),
-        div().relative().w(150).h(14).flex_none().bg("#0e1010").border(1).border_color(P.edge).overflow_hidden()
-          .child(div().absolute().top(2).left(0).w(34).h(8).bg(P.paper).loop("left", { from: 0, to: 112, period: 900 })),
-        ok(`[ ACCESS GRANTED: LEVEL ${L} ]`)),
-      row(txt("IDENTITY: RESEARCHER", P.text, 400, 11), bar("l-id", "████████")),
-      row(txt(`CLEARANCE: LEVEL ${L}`, P.text, 400, 11), ok(L >= 3 ? "[ GRANTED ]" : "[ RESTRICTED ]", L >= 3 ? P.green : P.amber)),
-      row(txt("SITE:", P.text, 400, 11), bar("l-site", space?.name), txt(`· ${tests} TEST ${tests === 1 ? "CELL" : "CELLS"}`, P.dim, 400, 11)),
-      row(txt("ALL ACTIVITY ON THIS TERMINAL IS MONITORED.", P.dim, 400, 11)),
-      row(txt("WELCOME, RESEARCHER.", P.paper, 800, 13)),
+      L([], 300, { custom: () => row(txt("KEYCARD SCAN", P.text, 400, 12),
+        div().relative().w(150).h(14).flex_none().bg(P.dark).border(1).border_color(P.edge).overflow_hidden()
+          .child(div().absolute().top(2).left(0).w(34).h(8).bg(P.text).loop("left", { from: 0, to: 112, period: 900 })),
+        txt(`[ ACCESS GRANTED: LEVEL ${level()} ]`, P.green, 800, 12)) }),
+      L([], 300, { custom: () => row(txt("IDENTITY: RESEARCHER", P.text, 400, 12), bar("l-id", "████████")) }),
+      L([], 300, { custom: () => row(txt(`CLEARANCE: LEVEL ${level()}`, P.text, 400, 12), txt(level() >= 3 ? "[ GRANTED ]" : "[ RESTRICTED ]", level() >= 3 ? P.green : P.amber, 800, 12)) }),
+      L([], 300, { custom: () => row(txt("SITE:", P.text, 400, 12), bar("l-site", space()?.name), txt(`· ${space()?.tabs.length ?? 0} TEST CELLS`, P.dim, 400, 12)) }),
+      L([pt("ALL ACTIVITY ON THIS TERMINAL IS MONITORED.", P.dim)], 350),
+      L([pt(label ?? "WELCOME, RESEARCHER.", P.text, 800, 15)], 300),
+      F(() => { this.phase = "done"; sfx("login"); this.closeAt = Date.now() + 5000; }),
     ];
+  }
 
-    return v_flex().id("login").size_full().bg("#080909").border(2).border_color(P.red).overflow_hidden()
+  // the typed bypass command: right, and the "hack" plays; wrong three times, and safe mode lets you in
+  submit(cx) {
+    if (this.phase !== "bypass") return;
+    const { L, S, F } = this.mk; const pt = this.pt;
+    const norm = (t) => String(t).trim().replace(/\s+/g, " ").toLowerCase();
+    const typed = this.input.value();
+    this.lines.push({ parts: [pt("root@site-19:~#", P.dim, 700), pt(typed, P.text)] });
+    this.input.set_value("");
+    if (norm(typed) === norm(this.command)) {
+      this.phase = "hack"; sfx("tick"); this.handle.focus();
+      this.lines = [{ parts: [pt("root@site-19:~#", P.dim, 700), pt(typed, P.text)] }]; // clear the screen
+      this.q.push(
+        S("[+] RESOLVING KEYCARD VALIDATOR", 600, [pt("done", P.green, 800)]),
+        S("[+] INJECTING PAYLOAD INTO AUTH DAEMON", 800, [pt("done", P.green, 800)]),
+        S("[+] SPOOFING CLEARANCE → LEVEL 5", 650, [pt("done", P.green, 800)]),
+        L([pt("[+] ROOT SHELL ACQUIRED", P.green, 800)], 300),
+        L([pt("ACCESS GRANTED · OVERRIDE ACCEPTED", P.green, 800, 16)], 400),
+        F(() => { this.phase = "done"; sfx("login"); this.closeAt = Date.now() + 3500; }),
+      );
+    } else {
+      this.attempts += 1;
+      sfx("denied");
+      if (this.attempts >= 3) {
+        this.phase = "hack"; this.handle.focus();
+        this.lines = [{ parts: [pt("TRACE COMPLETE. FALLING BACK TO SAFE MODE.", P.amber, 800)] }];
+        this.q.push(
+          S("[!] SWITCHING TO SAFE MODE", 900, [pt("done", P.amber, 800)]),
+          L([pt("ACCESS GRANTED · SAFE MODE", P.green, 800, 16)], 400),
+          F(() => { this.phase = "done"; sfx("login"); this.closeAt = Date.now() + 3500; }),
+        );
+      } else {
+        this.lines.push({ parts: [pt(`COMMAND NOT RECOGNIZED (${this.attempts}/3) · TRACE ${this.attempts * 33}%`, BAD, 700)] });
+      }
+    }
+    this.trim();
+    cx.notify();
+  }
+
+  render() {
+    const line = (l, i) => l.custom ? div().id(`ll-${i}`).child(l.custom())
+      : h_flex().id(`ll-${i}`).gap(7).items_center().flex_wrap()
+        .when(l.blink, (el) => el.loop("opacity", { from: 0.4, to: 1, period: 600 }))
+        .when(Boolean(l.prompt), (el) => el.child(txt(l.prompt, P.dim, 400, 12)))
+        .when(l.typing || l.text, (el) => el.child(txt(l.mask ? "*".repeat(l.text.length) : l.text, P.text, 700, 12)))
+        .when(l.typing, (el) => el.child(div().w(7).h(14).flex_none().bg(P.text).loop("opacity", { from: 0, to: 1, period: 500 })))
+        .children((l.parts ?? []).map((q) => txt(q.t, q.c ?? P.text, q.w ?? 400, q.s ?? 12)))
+        .when(l.spin, (el) => el.child(div().font_family(MONO).text_size(12).text_color(P.amber).frames(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], 90)));
+
+    return v_flex().id("login").size_full().bg("#080909").border(2).border_color(this.fail && this.phase !== "done" && this.lines.length > 6 ? P.red : P.red).overflow_hidden()
       .track_focus(this.handle)
-      .on_click(() => this.close())
+      .on_click(() => { if (this.phase === "done") this.close(); })
       .on_key_down((e, cx) => {
-        if (e.key === "enter" || e.key === "escape") { this.close(); cx.stop_propagation(); }
+        if (e.key === "escape" || (e.key === "enter" && this.phase === "done")) { this.close(); cx.stop_propagation(); }
       })
       .child(h_flex().w_full().h(40).flex_none().items_center().bg(P.dark)
         .child(div().w(8).h_full().flex_none().bg(P.red))
         .child(v_flex().px(12)
-          .child(txt("SCP FOUNDATION · SECURE ACCESS", P.text, 800, 13))
+          .child(txt(`${org()} · SECURE ACCESS`, P.text, 800, 13))
           .child(txt("Authorized personnel only", P.dim, 400, 9.5))))
-      .child(v_flex().flex_1().px(22).py(18).gap(9).children(lines.slice(0, this.shown)))
-      .child(h_flex().w_full().flex_none().px(22).pb(14).justify_end()
-        .when(this.shown >= this.total, (el) => el.child(txt("PRESS ENTER TO CONTINUE", P.red, 800, 10.5)
-          .loop("opacity", { from: 0.35, to: 1, period: 900 }))));
+      .child(v_flex().id("login-lines").flex_1().min_h(0).px(22).py(16).gap(7).overflow_hidden().children(this.lines.map(line))
+        .when(this.phase === "bypass", (el) => el.child(h_flex().gap(8).items_center().mt(4)
+          .child(txt("root@site-19:~#", P.dim, 700, 12))
+          .child(div().flex_1().min_w(0).child(Input.new(this.input).h(26).px(8).bg(P.dark).border_1().border_color(P.red).text_size(12).text_color(P.text))))))
+      .child(h_flex().w_full().flex_none().px(22).pb(12).gap(10).items_center().justify_end()
+        .when(this.phase === "done", (el) => el.child(txt("PRESS ENTER TO CONTINUE", P.red, 800, 10.5).loop("opacity", { from: 0.35, to: 1, period: 900 })))
+        .child(div().id("login-skip").px(8).py(3).border(1).border_color(P.edge).cursor_pointer().hover((x) => x.bg(P.dark2))
+          .tooltip("Skip the login (Esc)").on_click((_e, cx) => { cx.stop_propagation(); this.close(); })
+          .child(txt("SKIP", P.dim, 700, 9.5))));
   }
 }
 
 // ---- roles -------------------------------------------------------------------
 
-const ROLES = { header: Header, footer: Footer, pane: PaneHeader, personnel: Personnel, stamp: Stamps, terminate: Terminate, archive: Archive, article: Article, login: Login, dossier: Dossier, sitemap: SiteMap, machines: Machines, actions: Actions, incidents: Incidents, wiki: Wiki, dock: Dock };
+const ROLES = { header: Header, footer: Footer, pane: PaneHeader, personnel: Personnel, stamp: Stamps, terminate: Terminate, archive: Archive, article: Article, login: Login, dossier: Dossier, sitemap: SiteMap, machines: Machines, actions: Actions, incidents: Incidents, wiki: Wiki, dock: Dock, dept: DeptPicker, options: Options };
 
 export default class Scp extends View {
   init(p, cx) {

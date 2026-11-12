@@ -22,7 +22,7 @@ See [RECIPE.md](RECIPE.md) for everything it does and how it is built.
 
 ## Install
 
-Copy `layouts/`, `mods/` and `themes/` into `~/.config/herdr-app/`, merge `keys.json` into yours, then run `herdr-app do layout.switch --name scp-foundation`.
+Copy `layouts/`, `mods/`, `themes/` and `backgrounds/` into `~/.config/herdr-app/`, merge `keys.json` into yours, then run `herdr-app do layout.switch --name scp-foundation`.
 
 ## Credits and licence
 

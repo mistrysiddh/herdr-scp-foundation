@@ -84,9 +84,9 @@ export default class Tabs extends View {
       const L = Math.min(5, Math.max(1, Math.round(Number(shared("scp.clearance")) || 4)));
       const hide = (s) => "█".repeat(Math.min(8, Math.max(4, s.length)));
       const name = own ? (L < 3 ? hide(own) : own) : (L < 2 ? hide(u.nick) : u.nick);
-      return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(0).items_center().flex_none().text_size(11.5).font_family("JetBrains Mono")
+      return h_flex().id(`tab-${c.id}`).h(c.active ? 29 : 24).px(10).gap(7).rounded(0).items_center().flex_none().text_size(11.5).font_family("JetBrains Mono")
         .tooltip(`MTF ${u.full.toUpperCase()} "${u.nick}"`)
-        .border(1).border_color(c.active ? t.accent : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
+        .border_t(c.active ? 2 : 1).border_l(1).border_r(1).border_color(c.active ? t.accent : t.border).bg(c.active ? t.raised : t.canvas).text_color(c.active ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
@@ -123,7 +123,7 @@ export default class Tabs extends View {
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(3).overflow_x_scrollbar().children(shown.map(item)))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_end().gap(3).overflow_x_scrollbar().children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))

@@ -66,7 +66,8 @@
     "ctrl-alt-d": "scp.drill",
     "ctrl-alt-r": "scp.report",
     "ctrl-alt-t": "scp.dept",
-    "ctrl-alt-w": "scp.wiki"
+    "ctrl-alt-w": "scp.wiki",
+    "ctrl-alt-o": "scp.options"
   },
   "terminal": {
     "ctrl-backspace": "send:\u0017",

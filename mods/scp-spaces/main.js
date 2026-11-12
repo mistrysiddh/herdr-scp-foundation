@@ -25,7 +25,8 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const rowHeight = ({ tree }) => (tree ? 28 : 46);
+const scpOpts = () => (shared("scp.opts") && typeof shared("scp.opts") === "object" ? shared("scp.opts") : {});
+const rowHeight = ({ tree }) => (tree ? 28 : scpOpts().compact ? 34 : 46);
 const RAIL_CELL = 32;
 const railCell = (el) => h_flex().flex_none().justify_center().child(el);
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
@@ -40,6 +41,7 @@ const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b
 
 // Foundation vocabulary: object class from the agents in a space (same rule as the scp mod), and its colour.
 const MONO = "JetBrains Mono";
+const CLASS_COLOR_PAPER = { SAFE: "#3f6b27", EUCLID: "#8a5d00", THAUMIEL: "#4a3f8f", KETER: "#b53a22", APOLLYON: "#7a0a14" };
 const CLASS_COLOR = { SAFE: "#6f9a52", EUCLID: "#d9a21b", THAUMIEL: "#9d86e0", KETER: "#e8553f", APOLLYON: "#ef3b4f" };
 function classOf(list) {
   const n = (st) => list.filter((a) => a.status === st).length;
@@ -473,10 +475,13 @@ export default class Spaces extends View {
   spaceLine(w, g, fill, t) {
     const mine = agents().filter((a) => a.space === w.id);
     const cls = classOf(mine);
-    const color = CLASS_COLOR[cls];
+    const paper = scpOpts().paper === true;
+    const compact = scpOpts().compact === true;
+    const color = (paper ? CLASS_COLOR_PAPER : CLASS_COLOR)[cls];
     const breach = mine.some((a) => a.status === "blocked");
     const worst = breach ? "blocked" : mine.some((a) => a.status === "working") ? "working" : mine.some((a) => a.status === "done") ? "done" : null;
-    const [stamp, stampColor] = STAMP[worst] ?? ["CONTAINED", t.dim];
+    const [stamp, stampColorRaw] = STAMP[worst] ?? ["CONTAINED", t.dim];
+    const stampColor = paper ? ({ "#ef3b4f": "#b01030", "#d9a21b": "#8a5d00", "#6f9a52": "#3f6b27" }[stampColorRaw] ?? stampColorRaw) : stampColorRaw;
     const n = mine.length;
     const num = `SCP-${String(w.index).padStart(3, "0")}`;
     const cleared = clearance() >= 3;
@@ -503,8 +508,8 @@ export default class Spaces extends View {
         .child(h_flex().gap(6).items_center().min_w(0)
           .child(div().flex_none().font_family(MONO).text_size(10).font_bold().text_color(color).child(num))
           .child(div().flex_1().min_w(0).truncate().font_family(MONO).text_size(11).text_color(cleared ? t.foreground : t.dim).child(name)))
-        .child(div().min_w(0).truncate().font_family(MONO).text_size(9).font_bold().text_color(stampColor)
-          .child(`${stamp} \u00b7 ${String(n).padStart(2, "0")} SUBJECT${n === 1 ? "" : "S"}`)))
+        .when(!compact, (el) => el.child(div().min_w(0).truncate().font_family(MONO).text_size(9).font_bold().text_color(stampColor)
+          .child(`${stamp} \u00b7 ${String(n).padStart(2, "0")} SUBJECT${n === 1 ? "" : "S"}`))))
       .child(v_flex().flex_none().items_end().gap(3)
         .child(div().flex_none().px(5).py(1).border_1().border_color(color).font_family(MONO).text_size(8.5).font_bold().text_color(color)
           .when(breach, (el) => el.loop("opacity", { from: 0.4, to: 1, period: 700 })).child(cls))
