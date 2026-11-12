@@ -587,21 +587,36 @@ class Personnel {
 
 // A floating block over the work area: one stamp per idle pane you are not looking at.
 class Stamps {
+  init() { this.hidden = new Set(); } // panes whose stamp was dismissed, until they stop being idle
+
   render() {
     const all = panes();
-    const idle = all.map((p, i) => ({ p, i })).filter(({ p }) => p.terminal && p.status === "idle" && !p.focused).slice(0, 4);
+    const eligible = all.map((p, i) => ({ p, i })).filter(({ p }) => p.terminal && p.status === "idle" && !p.focused);
+    // a dismissed stamp stays away only while its pane stays idle and unfocused
+    for (const id of [...this.hidden]) if (!eligible.some(({ p }) => p.pane === id)) this.hidden.delete(id);
+    const idle = eligible.filter(({ p }) => !this.hidden.has(p.pane)).slice(0, 4);
     // a stamp thump when a new one lands (render only plays a sound, it never notifies)
     const ids = new Set(idle.map(({ p }) => p.pane));
     if (this.seen && idle.some(({ p }) => !this.seen.has(p.pane))) sfx("stamp");
     this.seen = ids;
     if (!idle.length) return div();
+    const dismiss = (id, tip, onClick) => div().id(id).flex_none().w(20).h(20).flex().items_center().justify_center()
+      .border(1).border_color(P.red).cursor_pointer().tooltip(tip)
+      .hover((x) => x.bg(P.red).text_color(P.onRed))
+      .font_family(MONO).font_weight(800).text_size(11).text_color(P.red)
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { cx.stop_propagation(); sfx("tick"); onClick(); cx.notify(); })
+      .child("✕");
     return v_flex().gap(6).p(6)
-      .children(idle.map(({ p, i }) => div().id(`st-${p.pane}`).px(10).py(5).border(2).border_color(P.red).bg(mix(P.red, "#0c0d0d", 0.12))
+      .when(idle.length > 1, (el) => el.child(h_flex().justify_end().child(
+        dismiss("st-clear", "Dismiss all stamps (they return when a pane goes idle again)", () => idle.forEach(({ p }) => this.hidden.add(p.pane))))))
+      .children(idle.map(({ p, i }) => h_flex().id(`st-${p.pane}`).gap(8).items_center().pl(10).pr(5).py(5).border(2).border_color(P.red).bg(mix(P.red, "#0c0d0d", 0.12))
         .cursor_pointer().on_click(() => run("pane.focus", { pane: p.pane }))
         .tooltip("Idle subject: click to focus")
-        .loop("opacity", { from: 0.55, to: 1, period: 2400 })
-        .font_family(MONO).font_weight(800).text_size(12).text_color(P.red)
-        .child(`DOC-${String(i + 1).padStart(3, "0")} · [DATA EXPUNGED]`)));
+        .child(div().flex_1().loop("opacity", { from: 0.55, to: 1, period: 2400 })
+          .font_family(MONO).font_weight(800).text_size(12).text_color(P.red)
+          .child(`DOC-${String(i + 1).padStart(3, "0")} · [DATA EXPUNGED]`))
+        .child(dismiss(`st-x-${p.pane}`, "Dismiss this stamp", () => this.hidden.add(p.pane)))));
   }
 }
 
