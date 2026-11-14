@@ -42,6 +42,7 @@ const col = (c) => P[LEGACY_COLOR[c] ?? c] ?? c;
 const logOf = () => (Array.isArray(shared(LOG_KEY)) ? shared(LOG_KEY) : []);
 const stop = (_e, cx) => cx.stop_propagation();
 const two = (n) => String(n).padStart(2, "0");
+const t12 = (d, sec) => `${d.getHours() % 12 || 12}:${two(d.getMinutes())}${sec ? ":" + two(d.getSeconds()) : ""} ${d.getHours() < 12 ? "AM" : "PM"}`;
 
 // ---- clearance ---------------------------------------------------------------
 
@@ -285,7 +286,7 @@ class Header {
     const item = `SCP-${String(space?.index ?? 0).padStart(3, "0")}`;
     const d = this.now;
     const day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
-    const clock = `${two(d.getHours())}:${two(d.getMinutes())}`;
+    const clock = t12(d);
     const stardate = `SITE-19 · DAY ${String(day).padStart(3, "0")}`;
     const L = level();
 
@@ -801,7 +802,7 @@ function onPaper(c) {
   if (P.darkPaper) return c; // bright colours already read on dark paper
   return { [P.amber]: "#8a5d00", [P.green]: "#3f6b27", [P.dim]: P.ink2, [P.red]: P.red }[c];
 }
-const clock3 = (ms) => { const d = new Date(ms); return `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`; };
+const clock3 = (ms) => { return t12(new Date(ms), true); };
 
 /** The title bar of a frameless window: dragging it moves the window, X closes it. */
 function windowBar(title, sub) {
@@ -1178,7 +1179,7 @@ class Incidents {
   render() {
     const log = logOf();
     const last = log.slice(-4).reverse();
-    const hhmm = (at) => { const d = new Date(at); return `${two(d.getHours())}:${two(d.getMinutes())}`; };
+    const hhmm = (at) => t12(new Date(at));
     return v_flex().id("incidents").size_full().bg(P.dark).border_b(1).border_color(P.edge)
       .child(h_flex().w_full().h(26).flex_none().px(12).gap(8).items_center().border_b(1).border_color(P.edge)
         .child(txt("RECENT INCIDENTS", P.text, 700, 10.5))
@@ -1674,10 +1675,7 @@ class Login {
           .child(txt("root@site-19:~#", P.dim, 700, 12))
           .child(div().flex_1().min_w(0).child(Input.new(this.input).h(26).px(8).bg(P.dark).border_1().border_color(P.red).text_size(12).text_color(P.text))))))
       .child(h_flex().w_full().flex_none().px(22).pb(12).gap(10).items_center().justify_end()
-        .when(this.phase === "done", (el) => el.child(txt("PRESS ENTER TO CONTINUE", P.red, 800, 10.5).loop("opacity", { from: 0.35, to: 1, period: 900 })))
-        .child(div().id("login-skip").px(8).py(3).border(1).border_color(P.edge).cursor_pointer().hover((x) => x.bg(P.dark2))
-          .tooltip("Skip the login (Esc)").on_click((_e, cx) => { cx.stop_propagation(); this.close(); })
-          .child(txt("SKIP", P.dim, 700, 9.5))));
+        .when(this.phase === "done", (el) => el.child(txt("PRESS ENTER TO CONTINUE", P.red, 800, 10.5).loop("opacity", { from: 0.35, to: 1, period: 900 }))));
   }
 }
 
